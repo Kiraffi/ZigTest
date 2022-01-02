@@ -1,0 +1,218 @@
+const std = @import("std");
+const ogl = @import("ogl.zig");
+
+const vec = @import("vector.zig");
+
+const c = @cImport({
+    @cInclude("SDL.h");
+    @cInclude("glad/glad.h");
+    @cInclude("SDL_opengl.h");
+});
+
+//const print = std.log.info;
+const print = std.debug.print;
+const panic = std.debug.panic;
+
+pub const Engine = struct
+{
+    width: c_int = 640,
+    height: c_int = 480,
+
+    timer: std.time.Timer,
+
+    dt: f64,
+    lastDtNanos: u64,
+    frameIndex: u64,
+    totalNanos: u64,
+    running: bool,
+
+    vsync: bool,
+
+    buttons: [512]u8,
+    halfPresses: [512]u8,
+
+    context: c.SDL_GLContext = null,
+    window: ?*c.SDL_Window = null,
+
+    pub fn deinit(self: *Engine) void
+    {
+        _ = self;
+        if(self.context != null)
+            c.SDL_GL_DeleteContext(self.context);
+        if(self.window != null)
+            c.SDL_DestroyWindow(self.window);
+        c.SDL_Quit();
+    }
+
+    pub fn setTitle(self: *Engine, title: []const u8) void
+    {
+        _ = self;
+        if(self.window != null)
+            c.SDL_SetWindowTitle(self.window, title.ptr);
+    }
+
+    pub fn isDown(self: *Engine, button: i32) bool
+    {
+        var b = button;
+        if(b & 0x4000_0000 != 0)
+            b = (b & 0xff) + 0x100;
+        const key = @intCast(usize, b);
+
+        if(key >= 512)
+            return false;
+        return self.buttons[key] == 1;
+    }
+    pub fn wasPressed(self: *Engine, button: i32) bool
+    {
+        var b = button;
+        if(b & 0x4000_0000 != 0)
+            b = (b & 0xff) + 0x100;
+        const key = @intCast(usize, b);
+
+        if(key >= 512)
+            return false;
+        return (self.buttons[key] == 1 and self.halfPresses[key] > 0) or (self.halfPresses[key] > 1);
+    }
+
+    pub fn setVSync(self: *Engine, vsync: bool) anyerror!void
+    {
+        const value: c_int = if(vsync) 1 else 0;
+        if(c.SDL_GL_SetSwapInterval( value ) < 0)
+        {
+            panic("Failed to set vsync on. SDL_error: {s}\n", .{ c.SDL_GetError() });
+        }
+        else
+        {
+            self.vsync = vsync;
+        }
+    }
+    pub fn swapBuffers(self: *Engine) anyerror!void
+    {
+        c.SDL_GL_SwapWindow( self.window );
+        self.lastDtNanos = self.timer.lap();
+        self.totalNanos += self.lastDtNanos;
+        self.dt = @intToFloat(f32, self.lastDtNanos) / 1_000_000_000.0;
+        if(self.frameIndex % 10 == 0)
+        {
+
+            const fps = if(self.dt > 0.0) @floatToInt(u32, 1.0 / self.dt) else 1000;
+            var printBuffer = std.mem.zeroes([128]u8);
+            const res = try std.fmt.bufPrint(&printBuffer, "Time: {}, Fps: {}", .{self.dt, fps});
+            self.setTitle(res);
+        }
+
+        if(!self.vsync)
+        {
+            // windows timeBeginPeriod
+            c.SDL_Delay(1);
+        }
+        self.frameIndex += 1;
+    }
+
+
+    pub fn init(width: c_int, height: c_int, title: []const u8) anyerror!Engine
+    {
+        if(c.SDL_Init(c.SDL_INIT_VIDEO) < 0)
+        {
+            panic("Failed to initialize SDL\n", .{});
+        }
+
+        //Use OpenGL 4.5 core
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_MINOR_VERSION, 5 );
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE );
+
+        _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_DEBUG_FLAG);
+
+        var window = c.SDL_CreateWindow(title.ptr, c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, width, height,
+            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_SHOWN );
+        if( window == null)
+        {
+            panic("SDL window cannot be created. SDL_error: {s}\n", .{ c.SDL_GetError() });
+        }
+
+        var context = c.SDL_GL_CreateContext(window);
+        if(context == null)
+        {
+            panic("Failed to create sdl gl context.  SDL_error: {s}\n", .{ c.SDL_GetError() });
+        }
+
+        // glad: load all OpenGL function pointers
+        if (c.gladLoadGLLoader(@ptrCast(c.GLADloadproc, c.SDL_GL_GetProcAddress)) == 0)
+        {
+            panic("Failed to initialise GLAD\n", .{});
+        }
+
+        print("Vendor:   {s}\n", .{c.glGetString(c.GL_VENDOR)});
+        print("Renderer: {s}\n", .{c.glGetString(c.GL_RENDERER)});
+        print("Version:  {s}\n", .{c.glGetString(c.GL_VERSION)});
+
+        c.glEnable(c.GL_DEBUG_OUTPUT);
+        c.glEnable(c.GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        c.glDebugMessageCallback(ogl.openglCallbackFunction, null);
+        c.glDebugMessageControl(c.GL_DONT_CARE, c.GL_DONT_CARE, c.GL_DONT_CARE, 0, null, 1);
+
+        // Make top left corner 0,0, requires ogl4.5
+        c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
+
+        var engine = Engine{.width = width, .height = height,
+            .timer = try std.time.Timer.start(), .dt = 0.0, .lastDtNanos = 0, .totalNanos = 0,
+            .buttons = std.mem.zeroes([512]u8), .halfPresses = std.mem.zeroes([512]u8),
+            .running = true, .frameIndex = 0,
+            .window = window, .context = context, .vsync = false };
+        try engine.setVSync(true);
+
+        return engine;
+    }
+
+
+    pub fn update(self: *Engine) anyerror!void
+    {
+        self.halfPresses = std.mem.zeroes([512]u8);
+
+        var ev: c.SDL_Event = undefined;
+        while (c.SDL_PollEvent(&ev) != 0)
+        {
+            switch (ev.type)
+            {
+                c.SDL_QUIT => self.running = false,
+                c.SDL_KEYDOWN => {
+                    var p = ev.key.keysym.sym;
+                    if(p & 0x4000_0000 != 0)
+                        p = (p & 0xff) + 0x100;
+                    const key = @intCast(usize, p);
+                    if(key < 512)
+                    {
+                        self.halfPresses[key] += 1;
+                        self.buttons[key] = 1;
+                    }
+
+                },
+                c.SDL_KEYUP => {
+                    var p = ev.key.keysym.sym;
+                    if(p & 0x4000_0000 != 0)
+                        p = (p & 0xff) + 0x100;
+                    const key = @intCast(usize, p);
+
+                    if(key < 512)
+                    {
+                        self.halfPresses[key] += 1;
+                        self.buttons[key] = 0;
+                    }
+
+                },
+                c.SDL_WINDOWEVENT => {
+                    if(ev.window.event == c.SDL_WINDOWEVENT_RESIZED)
+                    {
+                        self.width = ev.window.data1; self.height = ev.window.data2;
+                    }
+                },
+                else => {},
+            }
+        }
+
+        c.glClear( c.GL_COLOR_BUFFER_BIT );
+        c.glViewport(0, 0, self.width, self.height);
+    }
+
+};

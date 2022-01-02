@@ -1,0 +1,215 @@
+const std = @import("std");
+
+const c = @cImport({
+    @cInclude("glad/glad.h");
+    @cInclude("SDL_opengl.h");
+});
+
+
+const print = std.debug.print;
+const panic = std.debug.panic;
+
+pub fn openglCallbackFunction( source: c.GLenum, sourceType: c.GLenum,
+    id: c.GLuint, severity: c.GLenum, length: c.GLsizei,
+    message: [*c]const c.GLchar, userParam: ?*const anyopaque) callconv(.C) void
+{
+    _ = source;
+    _ = sourceType;
+    _ = id;
+    _ = severity;
+    _ = length;
+    _ = userParam;
+
+    if (severity == c.GL_DEBUG_SEVERITY_HIGH)
+    {
+        panic("Sever error: {s}\n", .{message});
+    }
+
+    const msgType: []const u8 = switch(severity)
+    {
+        c.GL_DEBUG_SEVERITY_HIGH => "High:",
+        c.GL_DEBUG_SEVERITY_MEDIUM => "Med:",
+        c.GL_DEBUG_SEVERITY_LOW => "Low:",
+
+        c.GL_DEBUG_SEVERITY_NOTIFICATION => "Info:",
+        else => "",
+
+    };
+
+    print("{s}, msg: {s}\n", .{msgType, message});
+}
+
+
+pub const Shader = struct
+{
+    program: c.GLuint,
+
+    pub fn createGraphicsProgram(vertText: []const u8, fragText: []const u8) Shader
+    {
+        var shader = Shader {.program = 0};
+        const vertexShader = compileShader(vertText, c.GL_VERTEX_SHADER);
+        if(vertexShader == 0)
+        {
+            print("Failed to compile vertex shader.\n", .{});
+            return shader;
+        }
+        defer c.glDeleteShader(vertexShader);
+
+        const fragShader = compileShader(fragText, c.GL_FRAGMENT_SHADER);
+        if(fragShader == 0)
+        {
+            print("Failed to compile fragment shader.\n", .{});
+            return shader;
+        }
+        defer c.glDeleteShader(fragShader);
+
+        var programID = c.glCreateProgram();
+        if(programID == 0)
+        {
+            panic("Failed to create shader program.\n", .{});
+            return shader;
+        }
+
+        //Attach vertex and fragment shader to program
+        c.glAttachShader( programID, vertexShader );
+        c.glAttachShader( programID, fragShader );
+        c.glLinkProgram( programID );
+        shader.program = programID;
+        var programSuccess = c.GL_TRUE;
+        c.glGetProgramiv(programID, c.GL_LINK_STATUS, &programSuccess);
+        if(programSuccess != c.GL_TRUE)
+        {
+            panic("Error linking program\n", .{});
+            return shader;
+        }
+
+        return shader;
+    }
+    pub fn isValid(self: *Shader) bool
+    {
+        return self.program != 0;
+    }
+    pub fn deleteProgram(self: *Shader) void
+    {
+        c.glDeleteProgram(self.program);
+        self.program = 0;
+    }
+    pub fn useShader(self: *Shader) void
+    {
+        c.glUseProgram( self.program );
+    }
+
+};
+
+
+fn compileShader(shaderText: []const u8, shaderType: c.GLuint) c.GLuint
+{
+    var shaderTextPtr = shaderText.ptr;
+    const shader = c.glCreateShader( shaderType );
+    c.glShaderSource( shader, 1, &shaderTextPtr, 0 );
+
+    c.glCompileShader( shader );
+
+    var shaderCompiled = c.GL_FALSE;
+    c.glGetShaderiv( shader, c.GL_COMPILE_STATUS, &shaderCompiled );
+    if( shaderCompiled != c.GL_TRUE )
+    {
+        panic("Failed to compile shader\n", .{});
+        return 0;
+    }
+    return shader;
+}
+
+pub const Texture = struct
+{
+    handle: c.GLuint,
+    width: i32,
+    height: i32,
+    textureType: c.GLenum,
+    pixelType: c.GLenum,
+
+    pub fn new(width: i32, height: i32, textureType: c.GLenum, pixelType: c.GLenum) Texture
+    {
+        const handle = generateTextureHandle(width, height, textureType, pixelType);
+        return Texture { .handle = handle, .width = width, .height = height, .textureType = textureType, .pixelType = pixelType };
+    }
+
+    pub fn resize(self: *Texture, width: i32, height: i32) void
+    {
+        self.deleteTexture();
+        self.handle = generateTextureHandle(width, height, self.textureType, self.pixelType);
+        self.width = width;
+        self.height = height;
+    }
+
+    pub fn deleteTexture(self: *Texture) void
+    {
+        if(self.handle != 0)
+        {
+            c.glDeleteTextures(1, &self.handle);
+            self.handle = 0;
+        }
+    }
+};
+
+
+fn generateTextureHandle(width: i32, height: i32, textureType: c.GLenum, pixelType: c.GLenum) c.GLuint
+{
+    var handle: c.GLuint = 0;
+    c.glCreateTextures(textureType, 1, &handle);
+    c.glTextureStorage2D(handle, 1, pixelType, width, height);
+    //gl::TextureSubImage2D(handle, 0, 0, 0, width, height, gl::BGRA, gl::UNSIGNED_BYTE, font_tex.as_ptr() as *const gl::GLvoid);
+
+    //gl::GenTextures(1, &mut handle);
+    //gl::BindTexture(texture_type, handle);
+    //gl::TexStorage2D(texture_type, 1, pixel_type, width, height);
+
+    //gl::TexSubImage2D(gl::TEXTURE_2D, 0, 0, 0, texture_width, texture_height, gl::BGRA, gl::UNSIGNED_BYTE, font_tex.as_ptr() as *const gl::GLvoid);
+    return handle;
+}
+
+
+
+
+pub const ShaderBuffer = struct
+{
+    bufferId: c.GLuint,
+    bufferType: c.GLenum,
+    size: c.GLsizeiptr,
+    flags: c.GLuint,
+
+    pub fn createBuffer(bufferType: c.GLenum, size: c.GLsizeiptr, data: ?*const anyopaque, flags: c.GLuint) ShaderBuffer
+    {
+        var buf = ShaderBuffer { .bufferId = 0, .flags = flags, .size = size, .bufferType = bufferType };
+        c.glCreateBuffers(1, &buf.bufferId );
+        c.glNamedBufferData(buf.bufferId, size, data, flags);
+        return buf;
+    }
+    pub fn isValid(self: *ShaderBuffer) bool
+    {
+        return self.bufferId != 0;
+    }
+    pub fn writeData(self: *ShaderBuffer, size: c.GLintptr, offset: c.GLintptr, data: *const anyopaque) void
+    {
+        if(size + offset > self.size)
+        {
+            panic("Trying to write outside buffer bounds: {} vs {}\n", .{self.size, size + offset});
+            return;
+        }
+        c.glNamedBufferSubData(self.bufferId, offset, size, data);
+    }
+
+    pub fn bind(self: *ShaderBuffer, slot: c.GLuint) void
+    {
+        if(self.bufferType == c.GL_ELEMENT_ARRAY_BUFFER)
+            c.glBindBuffer( c.GL_ELEMENT_ARRAY_BUFFER, self.bufferId )
+        else
+            c.glBindBufferBase(self.bufferType, slot, self.bufferId);
+    }
+
+    pub fn deleteBuffer(self: *ShaderBuffer) void
+    {
+        c.glDeleteBuffers(1, &self.bufferId);
+    }
+
+};
