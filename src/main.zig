@@ -4,7 +4,7 @@ const ogl = @import("ogl.zig");
 const vec = @import("vector.zig");
 const engine = @import("engine.zig");
 const utils = @import("utils.zig");
-const fontsystem = @import("fontsystem.zig");
+const FontSystem = @import("fontsystem.zig");
 
 const c = @cImport({
     @cInclude("SDL.h");
@@ -106,7 +106,7 @@ const GameState = struct
         self.getNextBlock();
     }
 
-    fn testCanMove(self: *const GameState, dir: *const IVec2) bool
+    fn testCanMove(self: *const GameState, dir: IVec2) bool
     {
         const bl = Blocks[self.currentBlockIndex];
         const b = switch(self.currentBlockRotation)
@@ -119,8 +119,8 @@ const GameState = struct
         };
         for(b) |block|
         {
-            var pos = vec.add2(IVec2, &block, &self.currentBlockPosition);
-            pos = vec.add2(IVec2, &pos, dir);
+            var pos = vec.add(IVec2, block, self.currentBlockPosition);
+            pos = vec.add(IVec2, pos, dir);
             if(pos.y < 0)
                 return false;
             if(pos.x < 0)
@@ -155,7 +155,7 @@ const GameState = struct
     {
 
         self.lastMoveTime = updateTime;
-        if(self.testCanMove(&IVec2{.x = 0, .y = 1}))
+        if(self.testCanMove(IVec2{.x = 0, .y = 1}))
         {
             self.currentBlockPosition.y += 1;
             return false;
@@ -182,7 +182,7 @@ const GameState = struct
         var rowsCleared: u8 = 0;
         for(b) |block|
         {
-            var pos = vec.add2(IVec2, &block, &self.currentBlockPosition);
+            var pos = vec.add(IVec2, block, self.currentBlockPosition);
             if(pos.y < 4)
             {
                 self.running = false;
@@ -328,6 +328,11 @@ pub fn main() anyerror!void
     var eng = try engine.Engine.init(640, 480, "Test sdl ogl");
     defer eng.deinit();
 
+    const v1 = Vec4{.x = 1.0, .y = 2.0, .z = 3.0, .w = 4.0 };
+    const v2 = Vec4{.x = 4.0, .y = 5.0, .z = 6.0, .w = 1.0 };
+    const v3 = vec.add(Vec4, v1, v2);
+    print("v3: {s}\n", .{v3});
+
     var program = ogl.Shader.createGraphicsProgram(vertexShaderSource, fragmentShaderSource);
     if(program.program == 0)
     {
@@ -393,9 +398,9 @@ pub fn main() anyerror!void
 
     }
 
-
-    var fontSystem = try fontsystem.FontSystem.init();
-    defer fontSystem.deinit();
+    if(!try FontSystem.init())
+        return;
+    defer FontSystem.deinit();
 
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
     const ran = @intCast(u64, std.time.nanoTimestamp() & 0xffff_ffff_ffff_ffff);
@@ -418,14 +423,14 @@ pub fn main() anyerror!void
             }
             if(eng.wasPressed(c.SDLK_LEFT) or eng.wasPressed(c.SDLK_a))
             {
-                if(gameState.testCanMove(&IVec2{.x = -1, .y = 0}))
+                if(gameState.testCanMove(IVec2{.x = -1, .y = 0}))
                 {
                     gameState.currentBlockPosition.x -= 1;
                 }
             }
             if(eng.wasPressed(c.SDLK_RIGHT) or eng.wasPressed(c.SDLK_d))
             {
-                if(gameState.testCanMove(&IVec2{.x = 1, .y = 0}))
+                if(gameState.testCanMove(IVec2{.x = 1, .y = 0}))
                 {
                     gameState.currentBlockPosition.x += 1;
                 }
@@ -441,7 +446,7 @@ pub fn main() anyerror!void
             {
                 const currRot = gameState.currentBlockRotation;
                 gameState.currentBlockRotation = (gameState.currentBlockRotation + 1) % 4;
-                if(!gameState.testCanMove(&IVec2{.x = 0, .y = 0}))
+                if(!gameState.testCanMove(IVec2{.x = 0, .y = 0}))
                 {
                     gameState.currentBlockRotation = currRot;
                 }
@@ -451,7 +456,7 @@ pub fn main() anyerror!void
             {
                 const currentBlockIndex = gameState.currentBlockIndex;
                 gameState.currentBlockIndex = (gameState.currentBlockIndex + 1) % @intCast(u8, Blocks.len);
-                if(!gameState.testCanMove(&IVec2{.x = 0, .y = 0}))
+                if(!gameState.testCanMove(IVec2{.x = 0, .y = 0}))
                 {
                     gameState.currentBlockIndex = currentBlockIndex;
                 }
@@ -506,7 +511,7 @@ pub fn main() anyerror!void
             };
             for(b) |block|
             {
-                var pos = vec.add2(IVec2, &block, &gameState.currentBlockPosition);
+                var pos = vec.add(IVec2, block, gameState.currentBlockPosition);
 
                 if(pos.y < 4)
                     continue;
@@ -527,7 +532,7 @@ pub fn main() anyerror!void
                 const offset = Vec2{.x = 450.0, .y = 160.0 };
                 const blo = Vec2{.x = BlockSize * @intToFloat(f32, block.x),
                     .y = BlockSize * @intToFloat(f32, block.y)};
-                var pos = vec.add2(Vec2, &blo, &offset);
+                var pos = vec.add(Vec2, blo, offset);
 
 
                 var data = &vertData[GameState.VisibleBoardSize + i];
@@ -546,12 +551,12 @@ pub fn main() anyerror!void
         {
             var printBuffer = std.mem.zeroes([32]u8);
             _ = try std.fmt.bufPrint(&printBuffer, "Score {}", .{gameState.score});
-            fontSystem.drawString(&printBuffer, Vec2{.x = 400.0, .y = 10.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
+            FontSystem.drawString(&printBuffer, Vec2{.x = 400.0, .y = 10.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
 
             if(!gameState.running)
             {
-                fontSystem.drawString("Game over!", Vec2{.x = 150.0, .y = 200.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
-                fontSystem.drawString("R to reset", Vec2{.x = 150.0, .y = 212.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
+                FontSystem.drawString("Game over!", Vec2{.x = 150.0, .y = 200.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
+                FontSystem.drawString("R to reset", Vec2{.x = 150.0, .y = 212.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
             }
         }
         // Bind frame data
@@ -568,7 +573,7 @@ pub fn main() anyerror!void
         ibo.bind(0);
         c.glDrawElements( c.GL_TRIANGLES, 6 * (GameState.VisibleBoardSize + 4), c.GL_UNSIGNED_INT, null );
 
-        fontSystem.draw(@intToFloat(f32, eng.width), @intToFloat(f32, eng.height));
+        FontSystem.draw();
         //Unbind program
         c.glUseProgram( 0 );
 

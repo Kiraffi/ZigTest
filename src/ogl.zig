@@ -122,11 +122,11 @@ fn compileShader(shaderText: []const u8, shaderType: c.GLuint) c.GLuint
 
 pub const Texture = struct
 {
-    handle: c.GLuint,
-    width: i32,
-    height: i32,
-    textureType: c.GLenum,
-    pixelType: c.GLenum,
+    handle: c.GLuint = 0,
+    width: i32 = 0,
+    height: i32 = 0,
+    textureType: c.GLenum = 0,
+    pixelType: c.GLenum = 0,
 
     pub fn new(width: i32, height: i32, textureType: c.GLenum, pixelType: c.GLenum) Texture
     {
@@ -173,10 +173,10 @@ fn generateTextureHandle(width: i32, height: i32, textureType: c.GLenum, pixelTy
 
 pub const ShaderBuffer = struct
 {
-    bufferId: c.GLuint,
-    bufferType: c.GLenum,
-    size: c.GLsizeiptr,
-    flags: c.GLuint,
+    bufferId: c.GLuint = 0,
+    bufferType: c.GLenum = 0,
+    size: c.GLsizeiptr = 0,
+    flags: c.GLuint = 0,
 
     pub fn createBuffer(bufferType: c.GLenum, size: c.GLsizeiptr, data: ?*const anyopaque, flags: c.GLuint) ShaderBuffer
     {
