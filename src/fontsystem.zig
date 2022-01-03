@@ -3,7 +3,6 @@ const ogl = @import("ogl.zig");
 
 const vec = @import("vector.zig");
 const engine = @import("engine.zig");
-const utils = @import("utils.zig");
 
 const c = @cImport({
     @cInclude("SDL.h");
@@ -27,10 +26,6 @@ const UVec2 = vec.UVec2;
 const UVec3 = vec.UVec3;
 const UVec4 = vec.UVec4;
 
-const getColor = utils.getColor;
-const getColor256 = utils.getColor256;
-
-
 const MAX_LETTERS: usize = 256;
 
 const vertexShaderSource = @embedFile("../data/shader/textured_triangle.vert");
@@ -49,9 +44,6 @@ pub const LetterData = extern struct
     tmp: f32,
 };
 var letterDatas: [MAX_LETTERS]LetterData = undefined;
-
-
-
 
 
 pub const FontSystem = struct
@@ -81,7 +73,6 @@ pub const FontSystem = struct
 
     pub fn init() anyerror!FontSystem
     {
-        print("letterdata size: {}\n", .{@sizeOf(LetterData)});
         var program = ogl.Shader.createGraphicsProgram(vertexShaderSource, fragmentShaderSource);
         if(program.program == 0)
         {
