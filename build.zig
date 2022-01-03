@@ -1,6 +1,7 @@
 const std = @import("std");
 
 
+
 fn buildTarget(b: *std.build.Builder, name: []const u8, zigFile: []const u8,
     target: std.zig.CrossTarget, mode: std.builtin.Mode, runnable: bool, testable: bool) void
 {
@@ -11,11 +12,20 @@ fn buildTarget(b: *std.build.Builder, name: []const u8, zigFile: []const u8,
     const exe = b.addExecutable(outputFile, zigFile);
     // Includes
     exe.addIncludeDir("deps/include");
+
     // Sources
     exe.addCSourceFile("deps/src/glad.c", &[_][]const u8{"-std=c99"});
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    if (exe.target.isWindows())
+    {
+        exe.addIncludeDir("deps/include/SDL");
+        exe.addLibPath("libs");
+        b.installBinFile("libs\\SDL2.dll", "SDL2.dll");
+    }
+
+
     exe.linkSystemLibrary("sdl2");
     exe.linkLibC();
     exe.install();
@@ -50,14 +60,18 @@ pub fn build(b: *std.build.Builder) void
     // means any target is allowed, and the default is native. Other options
     // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
+    //const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
 
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
+
 
     //buildTarget(b, "zigmain", "src/main.zig", target, mode, false, false);
     buildTarget(b, "zigtetris", "src/tetris.zig", target, mode, false, false);
 
 
     buildTarget(b, "zigmain", "src/main.zig", target, mode, true, false);
+
+
 }
