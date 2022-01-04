@@ -16,7 +16,7 @@ layout (std140, binding=0) uniform frame_data
     uvec2 padding;
 } vFrame;
 
-layout (std430, binding = 1) buffer shader_data
+layout (std430, binding = 1) restrict readonly buffer shader_data
 {
     Data values[];
 } vData;

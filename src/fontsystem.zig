@@ -1,9 +1,7 @@
 const std = @import("std");
 const ogl = @import("ogl.zig");
 
-pub const Math = struct {
-    usingnamespace @import("vector.zig");
-};
+const Math = @import("vector.zig");
 const engine = @import("engine.zig");
 
 const c = @cImport({
@@ -54,8 +52,10 @@ pub fn deinit() void
     fontTexture.deleteTexture();
     letterBuffer.deleteBuffer();
     ibo.deleteBuffer();
-    c.glDeleteVertexArrays(1, &vao);
 
+    if(vao != 0)
+        c.glDeleteVertexArrays(1, &vao);
+    vao = 0;
     program.deleteProgram();
 }
 
@@ -129,6 +129,7 @@ pub fn init() anyerror!bool
             return false;
         }
     }
+    c.glBindVertexArray(0);
 
     return true;
 }

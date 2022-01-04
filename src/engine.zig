@@ -219,9 +219,6 @@ pub const Engine = struct
                 else => {},
             }
         }
-
-        c.glClear( c.GL_COLOR_BUFFER_BIT );
-        c.glViewport(0, 0, self.width, self.height);
     }
 
 };

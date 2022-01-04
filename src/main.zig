@@ -1,10 +1,8 @@
 const std = @import("std");
 const ogl = @import("ogl.zig");
 
-pub const Math = struct {
-    usingnamespace @import("vector.zig");
-};
-
+const Math = @import("vector.zig");
+const transform = @import("transform.zig");
 const engine = @import("engine.zig");
 
 const utils = @import("utils.zig");
@@ -49,8 +47,27 @@ pub fn main() anyerror!void
             panic("Failed to create framebuffer\n", .{});
             return;
         }
+    }
+    defer frameDataBuffer.deleteBuffer();
+
+    const CameraFrameBuffer = extern struct
+    {
+        camMat: Math.Mat44 = Math.Mat44{},
+        viewProj: Math.Mat44 = Math.Mat44{},
+        mvp: Math.Mat44 = Math.Mat44{},
+        padding: Math.Mat44 = Math.Mat44{},
+    };
+    var cameraDataBuffer = ogl.ShaderBuffer{};
+    {
+        cameraDataBuffer = ogl.ShaderBuffer.createBuffer(c.GL_UNIFORM_BUFFER, @sizeOf(CameraFrameBuffer), null, c.GL_DYNAMIC_COPY);
+        if(!cameraDataBuffer.isValid())
+        {
+            panic("Failed to create camera framebuffer\n", .{});
+            return;
+        }
 
     }
+    defer cameraDataBuffer.deleteBuffer();
 
     const fontInit = try FontSystem.init();
     defer FontSystem.deinit();
@@ -61,66 +78,55 @@ pub fn main() anyerror!void
     defer MeshSystem.deinit();
     if(!meshInit)
         return;
+
+
+    var camera = transform.Transform{};
+    camera.pos[2] = 5.0;
+    //camera.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, Math.toRadians(180));
+
+    var b = CameraFrameBuffer{};
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
-
-    {
-        const v1 = Math.IVec3{1, 2, 3};
-        const v2 = Math.IVec3{4, 1, 2};
-        print("dot: {}\n", .{Math.dot(Math.IVec3, v1, v2)});
-        var m = Math.Mat44{};
-        var n = Math.Mat44{};
-        n[1] = 4.0;
-        n[2] = 4.0;
-        n[3] = 4.0;
-        n[4] = 4.0;
-        n[5] = 4.0;
-
-        m[2] = 3.0;
-        m[5] = 3.0;
-        m[7] = 3.0;
-        m[9] = 3.0;
-        m[12] = 3.0;
-        m[14] = 3.0;
-        m[10] = 3.0;
-        m[11] = 3.0;
-
-        const mm = Math.mul(m, n);
-        const nn = Math.mul(n, m);
-
-        var i: u32 = 0;
-        while(i < 16) : (i += 1)
-        {
-            print("mm {}: {}\n", .{i, mm[i]});
-            print("nn {}: {}\n", .{i, nn[i]});
-        }
-
-        const vv1 = Math.Vec2{1, 2};
-        const vv2 = Math.Vec2{3, 4};
-        const vv3 = vv1 * vv2;
-        print("x: {}, y: {}\n", .{vv3[0], vv3[1]});
-    }
 
     while (eng.running)
     {
         try eng.update();
 
+        if(eng.wasPressed(c.SDLK_ESCAPE))
         {
-            if(eng.wasPressed(c.SDLK_ESCAPE))
-            {
-                eng.running = false;
-            }
+            eng.running = false;
         }
+        const camMat = camera.getTransformAsCameraMatrix();
+        b.camMat = camMat;
+
+        const aspect = @intToFloat(f32, eng.width) / @intToFloat(f32, eng.height);
+        const fovY: f32 = Math.toRadians(90.0);
+        const zFar: f32 = 2000.0;
+        const zNear: f32 = 0.125;
+        const projMat = Math.createPerspectiveMatrixRH( fovY, aspect, zNear, zFar );
+        b.viewProj = projMat;
+        b.mvp = Math.mul(camMat, projMat);
+        b.padding = Math.Mat44Identity;
+
+
+
         const frame = FrameData {.width = @intToFloat(f32, eng.width), .height = @intToFloat(f32, eng.height), .pad1 = 0, .pad2 = 0};
+
         frameDataBuffer.writeData(@sizeOf(FrameData), 0, &frame);
+        cameraDataBuffer.writeData(@sizeOf(CameraFrameBuffer), 0, &b);
 
         {
             var printBuffer = std.mem.zeroes([32]u8);
             const buf = try std.fmt.bufPrint(&printBuffer, "Something5", .{});
             FontSystem.drawString(buf, Math.Vec2{400.0, 10.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
         }
+
+        c.glClear( c.GL_COLOR_BUFFER_BIT );
+        c.glViewport(0, 0, eng.width, eng.height);
+
         // Bind frame data
         frameDataBuffer.bind(0);
-
+        cameraDataBuffer.bind(1);
+        MeshSystem.draw();
 
         FontSystem.draw();
         //Unbind program

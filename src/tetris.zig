@@ -1,9 +1,7 @@
 const std = @import("std");
 const ogl = @import("ogl.zig");
 
-pub const Math = struct {
-    usingnamespace @import("vector.zig");
-};
+const Math = @import("vector.zig");
 
 const engine = @import("engine.zig");
 const utils = @import("utils.zig");
@@ -375,8 +373,9 @@ pub fn main() anyerror!void
             panic("Failed to create frameDataBuffer\n", .{});
             return;
         }
-
     }
+    defer frameDataBuffer.deleteBuffer();
+    c.glBindVertexArray(0);
 
 
     const fontInit = try FontSystem.init();
@@ -550,18 +549,24 @@ pub fn main() anyerror!void
                 FontSystem.drawString("R to reset", Math.Vec2{150.0, 212.0}, Math.Vec2{8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
             }
         }
-        // Bind frame data
-        frameDataBuffer.bind(0);
+
+        c.glClear( c.GL_COLOR_BUFFER_BIT );
+        c.glViewport(0, 0, eng.width, eng.height);
+
 
 
         program.useShader();
+        c.glBindVertexArray(vao);
+        // Bind frame data
+        frameDataBuffer.bind(0);
+        c.glDisable(c.GL_BLEND);
 
         // Set ssbo vertexdata
         ssbo.bind(1);
 
         //Set index data and render
-        //c.glBindBuffer( c.GL_ELEMENT_ARRAY_BUFFER, ibo );
         ibo.bind(0);
+
         c.glDrawElements( c.GL_TRIANGLES, 6 * (GameState.VisibleBoardSize + 4), c.GL_UNSIGNED_INT, null );
 
         FontSystem.draw();

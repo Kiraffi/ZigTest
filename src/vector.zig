@@ -17,7 +17,7 @@ pub const IVec4 = Vector(4, i32);
 
 pub const Mat44 = Vector(16, f32);
 
-
+pub const Mat44Identity =  Mat44{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
 pub const Quat = extern struct
 {
     v: Vec3 = Vec3{0.0, 0.0, 0.0 },
@@ -25,7 +25,7 @@ pub const Quat = extern struct
 };
 
 
-pub fn cross3(v1: anytype, v2: anytype) @TypeOf(v1)
+pub fn cross(v1: anytype, v2: anytype) @TypeOf(v1)
 {
     assert(@TypeOf(v1) == @TypeOf(v2));
     var v: @TypeOf(v1) = undefined;
@@ -35,14 +35,14 @@ pub fn cross3(v1: anytype, v2: anytype) @TypeOf(v1)
     return v;
 }
 
-pub fn sqLen(v1: anytype) @TypeOf(v1.x)
+pub fn sqrLen(v1: anytype) @TypeOf(v1[0])
 {
     return dot(v1, v1);
 }
 
 pub fn len(v1: anytype) f32
 {
-    return std.math.sqrt.sqrt(dot(v1, v1));
+    return std.math.sqrt(dot(v1, v1));
 }
 
 const MinLen: f32 = 1.0e-15;
@@ -50,39 +50,25 @@ const MinLen: f32 = 1.0e-15;
 pub fn normalize(v1: anytype) @TypeOf(v1)
 {
     const typ = @TypeOf(v1);
-    if(typ == Vec2 or typ == UVec2 or typ == IVec2)
+    switch(typ)
     {
-        const le = len(typ, v1);
-        assert(le >= MinLen);
-        const l = 1.0 / le;
-        return typ{ v1[0] * l, v1[1] * l };
+        Vec2, UVec2, IVec2, Vec3, UVec3, IVec3, Vec4, IVec4, UVec4 => {
+            const le = len(v1);
+            assert(le >= MinLen);
+            const l = 1.0 / le;
+            return mul(v1, l);
+        },
+        Quat => {
+            var result = Quat{};
+            result.w = std.math.clamp(v1.w, -1.0, 1.0);
+            if(result.w != 1.0 and result.w != -1.0)
+                result.v = normalize(Vec3, v1.v) * std.math.sqrt(1.0 - result.w * result.w);
+            return result;
+        },
+        else => {}
     }
-    else if(typ == Vec3 or typ == UVec3 or typ == IVec3)
-    {
-        const le = len(typ, v1);
-        assert(le >= MinLen);
-        const l = 1.0 / le;
-        return typ{ v1[0] * l, v1[1] * l, v1[2] * l };
-    }
-    else if(typ == Vec4 or typ == UVec4 or typ == IVec4)
-    {
-        const le = len(typ, v1);
-        assert(le >= MinLen);
-        const l = 1.0 / le;
-        return typ{ v1[0] * l, v1[1] * l, v1[2] * l, v1[3] * l };
-    }
-    else if(typ == Quat)
-    {
-        var result = Quat{};
-        result.w = std.math.clamp(v1.w, -1.0, 1.0);
-        if(result.w != 1.0 and result.w != -1.0)
-            result.v = normalize(Vec3, v1.v) * std.math.sqrt(1.0 - result.w * result.w);
-        return result;
-    }
-    else
-    {
-        unreachable;
-    }
+
+    unreachable;
 }
 
 pub fn add(v1: anytype, v2: anytype ) ReturnType(@TypeOf(v1), @TypeOf(v2))
@@ -166,15 +152,15 @@ pub fn mul(v1: anytype, v2: anytype ) ReturnType(@TypeOf(v1), @TypeOf(v2))
             Vec2, UVec2, IVec2, Vec3, UVec3, IVec3, Vec4, IVec4, UVec4 => return v1 * v2,
             Mat44 => {
                 var r: Mat44 = undefined;
-                r[0] = v1[0] * v2[0] + v1[1] * v2[4] + v1[2] * v2[ 8] + v1[3] * v2[12];
-                r[1] = v1[0] * v2[1] + v1[1] * v2[5] + v1[2] * v2[ 9] + v1[3] * v2[13];
-                r[2] = v1[0] * v2[2] + v1[1] * v2[6] + v1[2] * v2[10] + v1[3] * v2[14];
-                r[3] = v1[0] * v2[3] + v1[1] * v2[7] + v1[2] * v2[11] + v1[3] * v2[15];
+                r[0]  = v1[0] * v2[0] + v1[1] * v2[4] + v1[2] * v2[ 8] + v1[3] * v2[12];
+                r[1]  = v1[0] * v2[1] + v1[1] * v2[5] + v1[2] * v2[ 9] + v1[3] * v2[13];
+                r[2]  = v1[0] * v2[2] + v1[1] * v2[6] + v1[2] * v2[10] + v1[3] * v2[14];
+                r[3]  = v1[0] * v2[3] + v1[1] * v2[7] + v1[2] * v2[11] + v1[3] * v2[15];
 
-                r[4] = v1[4] * v2[0] + v1[5] * v2[4] + v1[6] * v2[ 8] + v1[7] * v2[12];
-                r[5] = v1[4] * v2[1] + v1[5] * v2[5] + v1[6] * v2[ 9] + v1[7] * v2[13];
-                r[6] = v1[4] * v2[2] + v1[5] * v2[6] + v1[6] * v2[10] + v1[7] * v2[14];
-                r[7] = v1[4] * v2[3] + v1[5] * v2[7] + v1[6] * v2[11] + v1[7] * v2[15];
+                r[4]  = v1[4] * v2[0] + v1[5] * v2[4] + v1[6] * v2[ 8] + v1[7] * v2[12];
+                r[5]  = v1[4] * v2[1] + v1[5] * v2[5] + v1[6] * v2[ 9] + v1[7] * v2[13];
+                r[6]  = v1[4] * v2[2] + v1[5] * v2[6] + v1[6] * v2[10] + v1[7] * v2[14];
+                r[7]  = v1[4] * v2[3] + v1[5] * v2[7] + v1[6] * v2[11] + v1[7] * v2[15];
 
                 r[ 8] = v1[8] * v2[0] + v1[9] * v2[4] + v1[10] * v2[ 8] + v1[11] * v2[12];
                 r[ 9] = v1[8] * v2[1] + v1[9] * v2[5] + v1[10] * v2[ 9] + v1[11] * v2[13];
@@ -189,7 +175,7 @@ pub fn mul(v1: anytype, v2: anytype ) ReturnType(@TypeOf(v1), @TypeOf(v2))
             },
             Quat => {
                 const v3 = add(v2, v1.w) + add(v1, v2.w);
-                const v4 = cross3(v1.v, v2.v);
+                const v4 = cross(v1.v, v2.v);
                 const v5 = v3 + v4;
                 return Quat{.v = v5, .w = v1.w * v2.w - dot(Vec3, v1.v, v2.v) };
             },
@@ -260,8 +246,13 @@ fn addScalar(v1: anytype, s: anytype) @TypeOf(v1)
 }
 
 
-pub fn dot(comptime typ: type, v1: typ, v2: typ) @TypeOf(v1[0])
+pub fn dot(v1: anytype, v2: anytype) @TypeOf(v1[0])
 {
+    const typ = @TypeOf(v1);
+    if(typ != @TypeOf(v2))
+    {
+        unreachable;
+    }
     if(typ == Vec2 or typ == UVec2 or typ == IVec2)
     {
         return v1[0] * v2[0] + v1[1] * v2[1];
@@ -291,9 +282,9 @@ pub fn createPerspectiveMatrixRH(fovRad: f32, aspectRatio: f32, nearPlane: f32, 
     const xScale: f32 = yScale / aspectRatio;
     const fRange: f32 = farPlane / (farPlane - nearPlane);
 
-    var result = Mat44{};
+    var result = Mat44Identity;
     result[0] = xScale;
-    result[1] = yScale;
+    result[5] = yScale;
 
     result[10] = -fRange;
     result[11] = -1.0;
@@ -302,12 +293,11 @@ pub fn createPerspectiveMatrixRH(fovRad: f32, aspectRatio: f32, nearPlane: f32, 
     return result;
 }
 
-pub fn createMatrixFromLookAt(pos: *const Vec3, target: *const Vec3, up: *const Vec3) Mat44
+pub fn createMatrixFromLookAt(pos: Vec3, target: Vec3, up: Vec3) Mat44
 {
-    const dis = target - pos;
-    const forward = normalize(Vec3, dis);
-    const right = normalize(Vec3, cross3(up, forward));
-    const realUp = normalize(Vec3, cross3(forward, right));
+    const forward = normalize(target - pos);
+    const right = normalize(cross(up, forward));
+    const realUp = normalize(cross(forward, right));
 
     var result: Mat44 = undefined;
     result[0] = right[0];
@@ -325,9 +315,9 @@ pub fn createMatrixFromLookAt(pos: *const Vec3, target: *const Vec3, up: *const 
     result[10] = forward[2];
     result[11] = 0.0;
 
-    result[12] = -dot(Vec3, pos, right);
-    result[13] = -dot(Vec3, pos, realUp);
-    result[14] = -dot(Vec3, pos, forward);
+    result[12] = -dot(pos, right);
+    result[13] = -dot(pos, realUp);
+    result[14] = -dot(pos, forward);
     result[15] = 1.0;
     return result;
 }
@@ -359,3 +349,42 @@ pub fn transposeMat44(v1: Mat44) Mat44
 }
 
 
+
+pub fn rotateVector(v: Vec3, q: Quat) Vec3
+{
+    const d = sqrLen(q.v);
+    return mul(v, (q.w * q.w - d)) + mul(@as(f32, 2.0), mul(q.v, dot(v, q.v)) + mul(cross(v, q.v), q.w));
+}
+
+
+pub fn getAxis(quat: Quat, right: *Vec3, up: *Vec3, forward: *Vec3) void
+{
+    right.x = 1.0 - 2.0 * quat.v.y * quat.v.y - 2.0 * quat.v.z * quat.v.z;
+    right.y = 2.0 * quat.v.x * quat.v.y + 2.0 * quat.w * quat.v.z;
+    right.z = 2.0 * quat.v.x * quat.v.z - 2.0 * quat.w * quat.v.y;
+
+    up.x = 2.0 * quat.v.x * quat.v.y - 2.0 * quat.w * quat.v.z;
+    up.y = 1.0 - 2.0 * quat.v.x * quat.v.x - 2.0 * quat.v.z * quat.v.z;
+    up.z = 2.0 * quat.v.y * quat.v.z + 2.0 * quat.w * quat.v.x;
+
+    forward.x = 2.0 * quat.v.x * quat.v.z + 2.0 * quat.w * quat.v.y;
+    forward.y = 2.0 * quat.v.y * quat.v.z - 2.0 * quat.w * quat.v.x;
+    forward.z = 1.0 - 2.0 * quat.v.x * quat.v.x - 2.0 * quat.v.y * quat.v.y;
+}
+
+
+pub fn getQuaternionFromAxisAngle(v: Vec3, angle: f32) Quat
+{
+    return Quat{.v = mul(normalize(v), std.math.sin(angle * 0.5)), .w = std.math.cos(angle * 0.5)};
+}
+
+
+pub fn toRadians(degree: f32) f32
+{
+    return degree / 180.0 * std.math.pi;
+}
+
+pub fn toDegrees(rad: f32) f32
+{
+    return rad / std.math.pi * 180.0;
+}
