@@ -5,7 +5,6 @@ const c = @cImport({
     @cInclude("SDL_opengl.h");
 });
 
-
 const print = std.debug.print;
 const panic = std.debug.panic;
 
@@ -42,7 +41,7 @@ pub fn openglCallbackFunction( source: c.GLenum, sourceType: c.GLenum,
 
 pub const Shader = struct
 {
-    program: c.GLuint,
+    program: c.GLuint = 0,
 
     pub fn createGraphicsProgram(vertText: []const u8, fragText: []const u8) Shader
     {
@@ -85,13 +84,14 @@ pub const Shader = struct
 
         return shader;
     }
-    pub fn isValid(self: *Shader) bool
+    pub fn isValid(self: *const Shader) bool
     {
         return self.program != 0;
     }
     pub fn deleteProgram(self: *Shader) void
     {
-        c.glDeleteProgram(self.program);
+        if(self.program != 0)
+            c.glDeleteProgram(self.program);
         self.program = 0;
     }
     pub fn useShader(self: *Shader) void
@@ -150,6 +150,11 @@ pub const Texture = struct
             self.handle = 0;
         }
     }
+
+    pub fn isValid(self: *const Texture) bool
+    {
+        return self.handle != 0;
+    }
 };
 
 
@@ -185,7 +190,7 @@ pub const ShaderBuffer = struct
         c.glNamedBufferData(buf.bufferId, size, data, flags);
         return buf;
     }
-    pub fn isValid(self: *ShaderBuffer) bool
+    pub fn isValid(self: *const ShaderBuffer) bool
     {
         return self.bufferId != 0;
     }
@@ -209,7 +214,9 @@ pub const ShaderBuffer = struct
 
     pub fn deleteBuffer(self: *ShaderBuffer) void
     {
-        c.glDeleteBuffers(1, &self.bufferId);
+        if(self.bufferId != 0)
+            c.glDeleteBuffers(1, &self.bufferId);
+        self.bufferId = 0;
     }
 
 };

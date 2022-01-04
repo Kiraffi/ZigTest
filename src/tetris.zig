@@ -1,7 +1,10 @@
 const std = @import("std");
 const ogl = @import("ogl.zig");
 
-const vec = @import("vector.zig");
+pub const Math = struct {
+    usingnamespace @import("vector.zig");
+};
+
 const engine = @import("engine.zig");
 const utils = @import("utils.zig");
 const FontSystem = @import("fontsystem.zig");
@@ -16,21 +19,6 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const Vec2 = vec.Vec2;
-const Vec3 = vec.Vec3;
-const Vec4 = vec.Vec4;
-
-const IVec2 = vec.IVec2;
-const IVec3 = vec.IVec3;
-const IVec4 = vec.IVec4;
-
-const UVec2 = vec.UVec2;
-const UVec3 = vec.UVec3;
-const UVec4 = vec.UVec4;
-
-const getColor = utils.getColor;
-const getColor256 = utils.getColor256;
-
 const vertexShaderSource = @embedFile("../data/shader/triangle.vert");
 const fragmentShaderSource = @embedFile("../data/shader/triangle.frag");
 
@@ -38,8 +26,8 @@ const Pcg = std.rand.Pcg;
 
 const Vertex2D = extern struct
 {
-    topLeft: Vec2,
-    rightBottom: Vec2,
+    topLeft: Math.Vec2,
+    rightBottom: Math.Vec2,
     color: u32,
     rotAngle: f32,
     pad1: u32,
@@ -55,14 +43,14 @@ const FrameData = extern struct
 };
 
 const Colors: [8]u32 = .{
-    getColor256(  0,   0,   0, 255), // Black background
-    getColor256(  0,   0, 255, 255), // Blue
-    getColor256(255, 255,   0, 255), // Yellow
-    getColor256(  0, 255, 255, 255), // Cyan
-    getColor256(255,   0, 255, 255), // Magneta
-    getColor256(  0, 255,   0, 255), // Green
-    getColor256(255, 160,   0, 255), // Orange
-    getColor256(255,   0,   0, 255), // Red
+    utils.getColor256(  0,   0,   0, 255), // Black background
+    utils.getColor256(  0,   0, 255, 255), // Blue
+    utils.getColor256(255, 255,   0, 255), // Yellow
+    utils.getColor256(  0, 255, 255, 255), // Cyan
+    utils.getColor256(255,   0, 255, 255), // Magneta
+    utils.getColor256(  0, 255,   0, 255), // Green
+    utils.getColor256(255, 160,   0, 255), // Orange
+    utils.getColor256(255,   0,   0, 255), // Red
 };
 
 const GameState = struct
@@ -77,7 +65,7 @@ const GameState = struct
 
     currentBlockIndex: u8,
     currentBlockRotation: u8,
-    currentBlockPosition: IVec2,
+    currentBlockPosition: Math.IVec2,
 
     nextBlockIndex: u8,
 
@@ -89,7 +77,7 @@ const GameState = struct
     pub fn new(seed: u64) GameState
     {
         var gameState = GameState{.board = std.mem.zeroes([BoardSize]u8), .score = 0,
-            .currentBlockIndex = 0, .currentBlockRotation = 0, .currentBlockPosition = IVec2{.x = 5, .y = 5},
+            .currentBlockIndex = 0, .currentBlockRotation = 0, .currentBlockPosition = Math.IVec2{5, 5},
             .nextBlockIndex = 0, .lastMoveTime = 0, .rand = Pcg.init(seed), .running = true};
 
 
@@ -106,7 +94,7 @@ const GameState = struct
         self.getNextBlock();
     }
 
-    fn testCanMove(self: *const GameState, dir: IVec2) bool
+    fn testCanMove(self: *const GameState, dir: Math.IVec2) bool
     {
         const bl = Blocks[self.currentBlockIndex];
         const b = switch(self.currentBlockRotation)
@@ -119,18 +107,18 @@ const GameState = struct
         };
         for(b) |block|
         {
-            var pos = vec.add(IVec2, block, self.currentBlockPosition);
-            pos = vec.add(IVec2, pos, dir);
-            if(pos.y < 0)
+            var pos = Math.add(block, self.currentBlockPosition);
+            pos = Math.add(pos, dir);
+            if(pos[1] < 0)
                 return false;
-            if(pos.x < 0)
+            if(pos[0] < 0)
                 return false;
-            if(pos.x >= GameState.BoardWidth)
+            if(pos[0] >= GameState.BoardWidth)
                 return false;
-            if(pos.y >= GameState.BoardHeight)
+            if(pos[1] >= GameState.BoardHeight)
                 return false;
 
-            const ind = @intCast(u32, pos.x) + @intCast(u32, pos.y) * GameState.BoardWidth;
+            const ind = @intCast(u32, pos[0]) + @intCast(u32, pos[1]) * GameState.BoardWidth;
             if(self.board[ind] != 0)
                 return false;
 
@@ -147,17 +135,17 @@ const GameState = struct
         self.currentBlockRotation = randBytes[3] % 4;
         self.nextBlockIndex = randBytes[7] % @intCast(u8, Blocks.len);
 
-        self.currentBlockPosition.y = 4;
-        self.currentBlockPosition.x = 5;
+        self.currentBlockPosition[1] = 4;
+        self.currentBlockPosition[0] = 5;
     }
 
     pub fn dropRow(self: *GameState, updateTime: u64) bool
     {
 
         self.lastMoveTime = updateTime;
-        if(self.testCanMove(IVec2{.x = 0, .y = 1}))
+        if(self.testCanMove(Math.IVec2{0, 1}))
         {
-            self.currentBlockPosition.y += 1;
+            self.currentBlockPosition[1] += 1;
             return false;
         }
         else
@@ -182,22 +170,22 @@ const GameState = struct
         var rowsCleared: u8 = 0;
         for(b) |block|
         {
-            var pos = vec.add(IVec2, block, self.currentBlockPosition);
-            if(pos.y < 4)
+            var pos = Math.add(block, self.currentBlockPosition);
+            if(pos[1] < 4)
             {
                 self.running = false;
             }
 
-            if(pos.y < 0)
+            if(pos[1] < 0)
                 continue;
-            if(pos.x < 0)
+            if(pos[0] < 0)
                 continue;
-            if(pos.x >= GameState.BoardWidth)
+            if(pos[0] >= GameState.BoardWidth)
                 continue;
-            if(pos.y >= GameState.BoardHeight)
+            if(pos[1] >= GameState.BoardHeight)
                 continue;
 
-            const ind = @intCast(u32, pos.x) + @intCast(u32, pos.y) * GameState.BoardWidth;
+            const ind = @intCast(u32, pos[0]) + @intCast(u32, pos[1]) * GameState.BoardWidth;
             self.board[ind] = self.currentBlockIndex + 1;
 
 
@@ -245,7 +233,6 @@ const GameState = struct
             4 => self.score += 5000,
             else => {}
         }
-        print("score: {}\n", .{self.score});
     }
 
 };
@@ -254,59 +241,59 @@ const GameState = struct
 
 const Block = struct
 {
-    up:    [4]IVec2,
-    right: [4]IVec2,
-    down:  [4]IVec2,
-    left:  [4]IVec2,
+    up:    [4]Math.IVec2,
+    right: [4]Math.IVec2,
+    down:  [4]Math.IVec2,
+    left:  [4]Math.IVec2,
 };
 
 const tBlock = Block{
-    .up    = .{ .{.x =  0, .y = -1 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 } },
-    .right = .{ .{.x =  0, .y = -1 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x =  0, .y =  1 } },
-    .down  = .{ .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x =  0, .y =  1 } },
-    .left  = .{ .{.x =  0, .y = -1 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  0, .y =  1 } },
+    .up    = .{ .{ 0, -1 }, .{-1,  0 }, .{ 0,  0 }, .{ 1,  0 } },
+    .right = .{ .{ 0, -1 }, .{ 0,  0 }, .{ 1,  0 }, .{ 0,  1 } },
+    .down  = .{ .{-1,  0 }, .{ 0,  0 }, .{ 1,  0 }, .{ 0,  1 } },
+    .left  = .{ .{ 0, -1 }, .{-1,  0 }, .{ 0,  0 }, .{ 0,  1 } },
 };
 
 const squareBlock = Block{
-    .up    = .{ .{.x =  0, .y = -1 }, .{.x =  1, .y = -1 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 } },
-    .right = .{ .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x =  0, .y =  1 }, .{.x =  1, .y =  1 } },
-    .down  = .{ .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x = -1, .y =  1 }, .{.x =  0, .y =  1 } },
-    .left  = .{ .{.x = -1, .y = -1 }, .{.x =  0, .y = -1 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 } },
+    .up    = .{ .{ 0, -1 }, .{ 1, -1 }, .{ 0,  0 }, .{ 1,  0 } },
+    .right = .{ .{ 0,  0 }, .{ 1,  0 }, .{ 0,  1 }, .{ 1,  1 } },
+    .down  = .{ .{-1,  0 }, .{ 0,  0 }, .{-1,  1 }, .{ 0,  1 } },
+    .left  = .{ .{-1, -1 }, .{ 0, -1 }, .{-1,  0 }, .{ 0,  0 } },
 };
 
 const lBlock = Block{
-    .up    = .{ .{.x =  0, .y = -2 }, .{.x =  0, .y = -1 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 } },
-    .right = .{ .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x =  2, .y =  0 }, .{.x =  0, .y =  1 } },
-    .down  = .{ .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  0, .y =  1 }, .{.x =  0, .y =  2 } },
-    .left  = .{ .{.x =  0, .y = -1 }, .{.x = -1, .y =  0 }, .{.x = -2, .y =  0 }, .{.x =  0, .y =  0 } },
+    .up    = .{ .{ 0, -2 }, .{ 0, -1 }, .{ 0,  0 }, .{ 1,  0 } },
+    .right = .{ .{ 0,  0 }, .{ 1,  0 }, .{ 2,  0 }, .{ 0,  1 } },
+    .down  = .{ .{-1,  0 }, .{ 0,  0 }, .{ 0,  1 }, .{ 0,  2 } },
+    .left  = .{ .{ 0, -1 }, .{-1,  0 }, .{-2,  0 }, .{ 0,  0 } },
 };
 
 const jBlock = Block{
-    .up    = .{ .{.x =  0, .y = -2 }, .{.x =  0, .y = -1 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 } },
-    .right = .{ .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x =  2, .y =  0 }, .{.x =  0, .y = -1 } },
-    .down  = .{ .{.x =  1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  0, .y =  1 }, .{.x =  0, .y =  2 } },
-    .left  = .{ .{.x =  0, .y =  1 }, .{.x = -1, .y =  0 }, .{.x = -2, .y =  0 }, .{.x =  0, .y =  0 } },
+    .up    = .{ .{ 0, -2 }, .{ 0, -1 }, .{-1,  0 }, .{ 0,  0 } },
+    .right = .{ .{ 0,  0 }, .{ 1,  0 }, .{ 2,  0 }, .{ 0, -1 } },
+    .down  = .{ .{ 1,  0 }, .{ 0,  0 }, .{ 0,  1 }, .{ 0,  2 } },
+    .left  = .{ .{ 0,  1 }, .{-1,  0 }, .{-2,  0 }, .{ 0,  0 } },
 };
 
 const zBlock = Block{
-    .up    = .{ .{.x = -1, .y = -1 }, .{.x =  0, .y = -1 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 } },
-    .right = .{ .{.x =  1, .y = -1 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x =  0, .y =  1 } },
-    .down  = .{ .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  0, .y =  1 }, .{.x =  1, .y =  1 } },
-    .left  = .{ .{.x =  0, .y = -1 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x = -1, .y =  1 } },
+    .up    = .{ .{-1, -1 }, .{ 0, -1 }, .{ 0,  0 }, .{ 1,  0 } },
+    .right = .{ .{ 1, -1 }, .{ 0,  0 }, .{ 1,  0 }, .{ 0,  1 } },
+    .down  = .{ .{-1,  0 }, .{ 0,  0 }, .{ 0,  1 }, .{ 1,  1 } },
+    .left  = .{ .{ 0, -1 }, .{-1,  0 }, .{ 0,  0 }, .{-1,  1 } },
 };
 
 const nBlock = Block{
-    .up    = .{ .{.x =  0, .y = -1 }, .{.x =  1, .y = -1 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 } },
-    .right = .{ .{.x = -1, .y = -1 }, .{.x =  0, .y =  0 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  1 } },
-    .down  = .{ .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x = -1, .y =  1 }, .{.x =  0, .y =  1 } },
-    .left  = .{ .{.x =  0, .y = -1 }, .{.x =  1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  1 } },
+    .up    = .{ .{ 0, -1 }, .{ 1, -1 }, .{-1,  0 }, .{ 0,  0 } },
+    .right = .{ .{-1, -1 }, .{ 0,  0 }, .{-1,  0 }, .{ 0,  1 } },
+    .down  = .{ .{ 0,  0 }, .{ 1,  0 }, .{-1,  1 }, .{ 0,  1 } },
+    .left  = .{ .{ 0, -1 }, .{ 1,  0 }, .{ 0,  0 }, .{ 1,  1 } },
 };
 
 const iBlock = Block{
-    .up    = .{ .{.x = -2, .y =  0 }, .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 } },
-    .right = .{ .{.x =  0, .y = -2 }, .{.x =  0, .y = -1 }, .{.x =  0, .y =  0 }, .{.x =  0, .y =  1 } },
-    .down  = .{ .{.x = -1, .y =  0 }, .{.x =  0, .y =  0 }, .{.x =  1, .y =  0 }, .{.x =  2, .y =  0 } },
-    .left  = .{ .{.x =  0, .y = -1 }, .{.x =  0, .y =  0 }, .{.x =  0, .y =  1 }, .{.x =  0, .y =  2 } },
+    .up    = .{ .{-2,  0 }, .{-1,  0 }, .{ 0,  0 }, .{ 1,  0 } },
+    .right = .{ .{ 0, -2 }, .{ 0, -1 }, .{ 0,  0 }, .{ 0,  1 } },
+    .down  = .{ .{-1,  0 }, .{ 0,  0 }, .{ 1,  0 }, .{ 2,  0 } },
+    .left  = .{ .{ 0, -1 }, .{ 0,  0 }, .{ 0,  1 }, .{ 0,  2 } },
 };
 
 const Blocks  = [_]Block{
@@ -320,12 +307,9 @@ const Blocks  = [_]Block{
 };
 
 
-
-
-
 pub fn main() anyerror!void
 {
-    var eng = try engine.Engine.init(640, 480, "Test sdl ogl");
+    var eng = try engine.Engine.init(640, 480, "Tetris Zig");
     defer eng.deinit();
 
 
@@ -346,7 +330,7 @@ pub fn main() anyerror!void
 
 
     // IBO
-    var ibo: ogl.ShaderBuffer = undefined;
+    var ibo = ogl.ShaderBuffer{};
     {
         var iboData: [6 * 65536]c.GLuint = undefined;
         var i: c.GLuint = 0;
@@ -370,7 +354,7 @@ pub fn main() anyerror!void
     defer ibo.deleteBuffer();
 
 
-    var ssbo: ogl.ShaderBuffer = undefined;
+    var ssbo = ogl.ShaderBuffer{};
     {
         ssbo = ogl.ShaderBuffer.createBuffer(c.GL_SHADER_STORAGE_BUFFER, (GameState.VisibleBoardSize + 4) * @sizeOf(Vertex2D),
             null, c.GL_DYNAMIC_COPY);
@@ -382,22 +366,23 @@ pub fn main() anyerror!void
     }
     defer ssbo.deleteBuffer();
 
-    var frameDataBuffer: ogl.ShaderBuffer = undefined;
+    var frameDataBuffer = ogl.ShaderBuffer{};
     {
         const frame = FrameData {.width = @intToFloat(f32, eng.width), .height = @intToFloat(f32, eng.height), .pad1 = 0, .pad2 = 0};
         frameDataBuffer = ogl.ShaderBuffer.createBuffer(c.GL_UNIFORM_BUFFER, @sizeOf(FrameData), &frame, c.GL_DYNAMIC_COPY);
-        if(!ssbo.isValid())
+        if(!frameDataBuffer.isValid())
         {
-            panic("Failed to create ssbo\n", .{});
+            panic("Failed to create frameDataBuffer\n", .{});
             return;
         }
 
     }
 
 
-    if(!try FontSystem.init())
-        return;
+    const fontInit = try FontSystem.init();
     defer FontSystem.deinit();
+    if(!fontInit)
+        return;
 
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
     const ran = @intCast(u64, std.time.nanoTimestamp() & 0xffff_ffff_ffff_ffff);
@@ -406,7 +391,10 @@ pub fn main() anyerror!void
     while (eng.running)
     {
         try eng.update();
-
+        const currPos = gameState.currentBlockPosition;
+        const currRota = gameState.currentBlockRotation;
+        const currInd = gameState.currentBlockIndex;
+        const wasRunning = gameState.running;
         if(gameState.running)
         {
             if(eng.totalNanos - gameState.lastMoveTime > 200_000_000)
@@ -420,16 +408,16 @@ pub fn main() anyerror!void
             }
             if(eng.wasPressed(c.SDLK_LEFT) or eng.wasPressed(c.SDLK_a))
             {
-                if(gameState.testCanMove(IVec2{.x = -1, .y = 0}))
+                if(gameState.testCanMove(Math.IVec2{-1, 0}))
                 {
-                    gameState.currentBlockPosition.x -= 1;
+                    gameState.currentBlockPosition[0] -= 1;
                 }
             }
             if(eng.wasPressed(c.SDLK_RIGHT) or eng.wasPressed(c.SDLK_d))
             {
-                if(gameState.testCanMove(IVec2{.x = 1, .y = 0}))
+                if(gameState.testCanMove(Math.IVec2{1, 0}))
                 {
-                    gameState.currentBlockPosition.x += 1;
+                    gameState.currentBlockPosition[0] += 1;
                 }
             }
 
@@ -443,7 +431,7 @@ pub fn main() anyerror!void
             {
                 const currRot = gameState.currentBlockRotation;
                 gameState.currentBlockRotation = (gameState.currentBlockRotation + 1) % 4;
-                if(!gameState.testCanMove(IVec2{.x = 0, .y = 0}))
+                if(!gameState.testCanMove(Math.IVec2{0, 0}))
                 {
                     gameState.currentBlockRotation = currRot;
                 }
@@ -453,7 +441,7 @@ pub fn main() anyerror!void
             {
                 const currentBlockIndex = gameState.currentBlockIndex;
                 gameState.currentBlockIndex = (gameState.currentBlockIndex + 1) % @intCast(u8, Blocks.len);
-                if(!gameState.testCanMove(IVec2{.x = 0, .y = 0}))
+                if(!gameState.testCanMove(Math.IVec2{0, 0}))
                 {
                     gameState.currentBlockIndex = currentBlockIndex;
                 }
@@ -470,6 +458,13 @@ pub fn main() anyerror!void
             {
                 gameState.reset();
             }
+        }
+        if(currPos[0] == gameState.currentBlockPosition[0] and currPos[1] == gameState.currentBlockPosition[1] and
+            currRota == gameState.currentBlockRotation and currInd == gameState.currentBlockIndex and
+            wasRunning == gameState.running )
+        {
+            try eng.endFrame();
+            continue;
         }
         const frame = FrameData {.width = @intToFloat(f32, eng.width), .height = @intToFloat(f32, eng.height), .pad1 = 0, .pad2 = 0};
         frameDataBuffer.writeData(@sizeOf(FrameData), 0, &frame);
@@ -489,10 +484,11 @@ pub fn main() anyerror!void
                     continue;
                 y -= 4;
                 var data = &vertData[i - 4 * GameState.BoardWidth];
-                data.topLeft.x =     offsetX + x * BlockSize - BlockSize * 0.5;
-                data.topLeft.y =     offsetY + y * BlockSize - BlockSize * 0.5;
-                data.rightBottom.x = offsetX + x * BlockSize + BlockSize * 0.5;
-                data.rightBottom.y = offsetY + y * BlockSize + BlockSize * 0.5;
+
+                data.topLeft[0] =     offsetX + x * BlockSize - BlockSize * 0.5;
+                data.topLeft[1] =     offsetY + y * BlockSize - BlockSize * 0.5;
+                data.rightBottom[0] = offsetX + x * BlockSize + BlockSize * 0.5;
+                data.rightBottom[1] = offsetY + y * BlockSize + BlockSize * 0.5;
                 data.color = Colors[block];
                 data.rotAngle = 0.0;
             }
@@ -508,35 +504,33 @@ pub fn main() anyerror!void
             };
             for(b) |block|
             {
-                var pos = vec.add(IVec2, block, gameState.currentBlockPosition);
+                var pos = Math.add(block, gameState.currentBlockPosition);
 
-                if(pos.y < 4)
+                if(pos[1] < 4)
                     continue;
-                if(pos.x < 0)
+                if(pos[0] < 0)
                     continue;
-                if(pos.x >= GameState.BoardWidth)
+                if(pos[0] >= GameState.BoardWidth)
                     continue;
-                if(pos.y >= GameState.BoardHeight)
+                if(pos[1] >= GameState.BoardHeight)
                     continue;
-                pos.y -= 4;
-                const ind = @intCast(u32, pos.x) + @intCast(u32, pos.y) * GameState.BoardWidth;
+                pos[1] -= 4;
+                const ind = @intCast(u32, pos[0]) + @intCast(u32, pos[1]) * GameState.BoardWidth;
                 var data = &vertData[ind];
                 data.color = Colors[gameState.currentBlockIndex + 1];
             }
 
             for(Blocks[gameState.nextBlockIndex].up) |block, i|
             {
-                const offset = Vec2{.x = 450.0, .y = 160.0 };
-                const blo = Vec2{.x = BlockSize * @intToFloat(f32, block.x),
-                    .y = BlockSize * @intToFloat(f32, block.y)};
-                var pos = vec.add(Vec2, blo, offset);
+                const offset = Math.Vec2{450.0, 160.0 };
+                const blo = Math.Vec2{BlockSize * @intToFloat(f32, block[0]),
+                    BlockSize * @intToFloat(f32, block[1])};
+                var pos = Math.add(blo, offset);
 
 
                 var data = &vertData[GameState.VisibleBoardSize + i];
-                data.topLeft.x =     pos.x - BlockSize * 0.5;
-                data.topLeft.y =     pos.y - BlockSize * 0.5;
-                data.rightBottom.x = pos.x + BlockSize * 0.5;
-                data.rightBottom.y = pos.y + BlockSize * 0.5;
+                data.topLeft = Math.add(pos, -BlockSize * 0.5);
+                data.rightBottom = Math.add(pos, BlockSize * 0.5);
                 data.color = Colors[gameState.nextBlockIndex + 1];
                 data.rotAngle = 0.0;
             }
@@ -548,12 +542,12 @@ pub fn main() anyerror!void
         {
             var printBuffer = std.mem.zeroes([32]u8);
             _ = try std.fmt.bufPrint(&printBuffer, "Score {}", .{gameState.score});
-            FontSystem.drawString(&printBuffer, Vec2{.x = 400.0, .y = 10.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
+            FontSystem.drawString(&printBuffer, Math.Vec2{400.0, 10.0}, Math.Vec2{8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
 
             if(!gameState.running)
             {
-                FontSystem.drawString("Game over!", Vec2{.x = 150.0, .y = 200.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
-                FontSystem.drawString("R to reset", Vec2{.x = 150.0, .y = 212.0}, Vec2{.x = 8.0, .y = 12.0}, getColor256(255, 255, 255, 255));
+                FontSystem.drawString("Game over!", Math.Vec2{150.0, 200.0}, Math.Vec2{8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
+                FontSystem.drawString("R to reset", Math.Vec2{150.0, 212.0}, Math.Vec2{8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
             }
         }
         // Bind frame data
@@ -574,7 +568,9 @@ pub fn main() anyerror!void
         //Unbind program
         c.glUseProgram( 0 );
 
-        try eng.swapBuffers();
+        eng.swapBuffers();
+        try eng.endFrame();
+
     }
 }
 

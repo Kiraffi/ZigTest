@@ -1,7 +1,9 @@
 const std = @import("std");
 const ogl = @import("ogl.zig");
 
-const vec = @import("vector.zig");
+pub const Math = struct {
+    usingnamespace @import("vector.zig");
+};
 const engine = @import("engine.zig");
 
 const c = @cImport({
@@ -14,18 +16,6 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const Vec2 = vec.Vec2;
-const Vec3 = vec.Vec3;
-const Vec4 = vec.Vec4;
-
-const IVec2 = vec.IVec2;
-const IVec3 = vec.IVec3;
-const IVec4 = vec.IVec4;
-
-const UVec2 = vec.UVec2;
-const UVec3 = vec.UVec3;
-const UVec4 = vec.UVec4;
-
 const MAX_LETTERS: usize = 256;
 
 const vertexShaderSource = @embedFile("../data/shader/textured_triangle.vert");
@@ -37,10 +27,10 @@ const fontSrc = @embedFile("../data/font/new_font.dat");
 
 const LetterData = extern struct
 {
-    pos: Vec2,
-    size: Vec2,
+    pos: Math.Vec2,
+    size: Math.Vec2,
 
-    uv: Vec2,
+    uv: Math.Vec2,
 
     col: u32,
     tmp: f32,
@@ -48,10 +38,10 @@ const LetterData = extern struct
 
 var letterDatas: [MAX_LETTERS]LetterData = undefined;
 
-var letterBuffer: ogl.ShaderBuffer = undefined;
-var ibo: ogl.ShaderBuffer = undefined;
-var fontTexture: ogl.Texture = undefined;
-var program: ogl.Shader = undefined;
+var letterBuffer = ogl.ShaderBuffer{};
+var ibo = ogl.ShaderBuffer{};
+var program = ogl.Shader{};
+var fontTexture = ogl.Texture{};
 
 var vao: c.GLuint = 0;
 
@@ -143,15 +133,14 @@ pub fn init() anyerror!bool
     return true;
 }
 
-
-pub fn drawString(str: []const u8, pos: Vec2, letterSize: Vec2, col: u32) void
+pub fn drawString(str: []const u8, pos: Math.Vec2, letterSize: Math.Vec2, col: u32) void
 {
     var p = letterSize;
-    p.x *= 0.5;
-    p.y *= 0.5;
-    p = vec.add(Vec2, pos, p);
+    p[0] *= 0.5;
+    p[1] *= 0.5;
+    p = pos + p;
 
-    var uv = Vec2{.x = 0.0, .y = 0.5};
+    var uv = Math.Vec2{0.0, 0.5};
     for(str) |letter|
     {
         if(writternLetters >= MAX_LETTERS)
@@ -160,11 +149,11 @@ pub fn drawString(str: []const u8, pos: Vec2, letterSize: Vec2, col: u32) void
             continue;
         const l: u8 = @intCast(u8, letter) - 32;
 
-        uv.x = @intToFloat(f32, l);
+        uv[0] = @intToFloat(f32, l);
 
         letterDatas[writternLetters] =
             LetterData{ .pos = p, .size = letterSize, .uv = uv, .col = col, .tmp = 0.0};
-        p.x += letterSize.x + 1.0;
+        p[0] += letterSize[0] + 1.0;
         writternLetters += 1;
     }
 }

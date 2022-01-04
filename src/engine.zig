@@ -13,6 +13,8 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
+var flipHappened = false;
+
 pub const Engine = struct
 {
     width: c_int = 640,
@@ -86,9 +88,14 @@ pub const Engine = struct
             self.vsync = vsync;
         }
     }
-    pub fn swapBuffers(self: *Engine) anyerror!void
+    pub fn swapBuffers(self: *Engine) void
     {
         c.SDL_GL_SwapWindow( self.window );
+        flipHappened = true;
+    }
+
+    pub fn endFrame(self: *Engine) anyerror!void
+    {
         self.lastDtNanos = self.timer.lap();
         self.totalNanos += self.lastDtNanos;
         self.dt = @intToFloat(f32, self.lastDtNanos) / 1_000_000_000.0;
@@ -101,12 +108,14 @@ pub const Engine = struct
             self.setTitle(res);
         }
 
-        if(!self.vsync)
+        if(!self.vsync or !flipHappened)
         {
             // windows timeBeginPeriod
-            c.SDL_Delay(1);
+            c.SDL_Delay(5);
         }
+        flipHappened = false;
         self.frameIndex += 1;
+
     }
 
 
