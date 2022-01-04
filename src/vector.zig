@@ -188,9 +188,9 @@ pub fn mul(v1: anytype, v2: anytype ) ReturnType(@TypeOf(v1), @TypeOf(v2))
                 return r;
             },
             Quat => {
-                const v3 = Vec3{v2[0] * v1.w + v1[0] * v2.w, v2[1] * v1.w + v1[1] * v2.w, v2[2] * v1.w + v1[2] * v2.w };
+                const v3 = add(v2, v1.w) + add(v1, v2.w);
                 const v4 = cross3(v1.v, v2.v);
-                const v5 = Vec3{v3[0] + v4[0], v3[1] + v4[1], v3[2] + v4[2] };
+                const v5 = v3 + v4;
                 return Quat{.v = v5, .w = v1.w * v2.w - dot(Vec3, v1.v, v2.v) };
             },
             else => { unreachable; }
@@ -202,17 +202,17 @@ pub fn mul(v1: anytype, v2: anytype ) ReturnType(@TypeOf(v1), @TypeOf(v2))
         r[0] = v2[0] * (v1[0]  + v1[1]  + v1[2]  + v1[3]);
         r[1] = v2[1] * (v1[4]  + v1[5]  + v1[6]  + v1[7]);
         r[2] = v2[2] * (v1[8]  + v1[9]  + v1[10] + v1[11]);
-        r.w = v2.w * (v1[12] + v1[13] + v1[14] + v1[14]);
+        r[3] = v2[3] * (v1[12] + v1[13] + v1[14] + v1[14]);
 
         return r;
     }
     else if(t1 == Vec4 and t2 == Mat44)
     {
         var r: Vec4 = undefined;
-        r[0] = v1[0] * v2[0]  + v1[1] * v2[1]  + v1[2] * v2[ 2] + v1.w * v2[ 3];
-        r[1] = v1[0] * v2[4]  + v1[1] * v2[5]  + v1[2] * v2[ 6] + v1.w * v2[ 7];
-        r[2] = v1[0] * v2[8]  + v1[1] * v2[9]  + v1[2] * v2[10] + v1.w * v2[11];
-        r.w = v1[0] * v2[12] + v1[1] * v2[13] + v1[2] * v2[14] + v1.w * v2[15];
+        r[0] = v1[0] * v2[0]  + v1[1] * v2[1]  + v1[2] * v2[ 2] + v1[3] * v2[ 3];
+        r[1] = v1[0] * v2[4]  + v1[1] * v2[5]  + v1[2] * v2[ 6] + v1[3] * v2[ 7];
+        r[2] = v1[0] * v2[8]  + v1[1] * v2[9]  + v1[2] * v2[10] + v1[3] * v2[11];
+        r[3] = v1[0] * v2[12] + v1[1] * v2[13] + v1[2] * v2[14] + v1[3] * v2[15];
         return r;
     }
 
@@ -272,7 +272,7 @@ pub fn dot(comptime typ: type, v1: typ, v2: typ) @TypeOf(v1[0])
     }
     else if(typ == Vec4 or typ == UVec4 or typ == IVec4)
     {
-        return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2] + v1.w * v2.w;
+        return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2] + v1[3] * v2[3];
     }
     else
     {
