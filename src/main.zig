@@ -103,13 +103,13 @@ pub fn main() anyerror!void
         {
             const camUp = Math.rotateVector(Math.Vec3{0, 1, 0}, camera.rot);
             const q = Math.getQuaternionFromAxisAngle(camUp, rotSpeed);
-            camera.rot = Math.mul(q, camera.rot);
+            camera.rot = Math.mul(camera.rot, q);
         }
         if(eng.isDown(c.SDLK_l))
         {
             const camUp = Math.rotateVector(Math.Vec3{0, 1, 0}, camera.rot);
             const q = Math.getQuaternionFromAxisAngle(camUp, -rotSpeed);
-            camera.rot = Math.mul(q, camera.rot);
+            camera.rot = Math.mul(camera.rot, q);
         }
         if(eng.isDown(c.SDLK_i))
         {
