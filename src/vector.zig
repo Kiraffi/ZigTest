@@ -287,8 +287,8 @@ pub fn createPerspectiveMatrixRH(fovRad: f32, aspectRatio: f32, nearPlane: f32, 
     result[5] = -yScale;
 
     result[10] = -fRange;
-    result[11] = -1.0;
-    result[14] = -nearPlane * fRange;
+    result[11] = -nearPlane * fRange;
+    result[14] = -1.0;
     result[15] = 0.0;
     return result;
 }
@@ -301,26 +301,27 @@ pub fn createMatrixFromLookAt(pos: Vec3, target: Vec3, up: Vec3) Mat44
 
     var result: Mat44 = undefined;
     result[0] = right[0];
-    result[1] = realUp[0];
-    result[2] = forward[0];
-    result[3] = 0.0;
+    result[1] = right[1];
+    result[2] = right[2];
+    result[3] = -dot(pos, right);
 
-    result[4] = right[1];
+    result[4] = realUp[0];
     result[5] = realUp[1];
-    result[6] = forward[1];
-    result[7] = 0.0;
+    result[6] = realUp[2];
+    result[7] = -dot(pos, realUp);
 
-    result[8]  = right[2];
-    result[9]  = realUp[2];
+    result[8]  = forward[0];
+    result[9]  = forward[1];
     result[10] = forward[2];
-    result[11] = 0.0;
+    result[11] = -dot(pos, forward);
 
-    result[12] = -dot(pos, right);
-    result[13] = -dot(pos, realUp);
-    result[14] = -dot(pos, forward);
+    result[12] = 0.0;
+    result[13] = 0.0;
+    result[14] = 0.0;
     result[15] = 1.0;
     return result;
 }
+
 
 pub fn transposeMat44(v1: Mat44) Mat44
 {
@@ -435,7 +436,7 @@ pub fn getAxis(quat: Quat, right: *Vec3, up: *Vec3, forward: *Vec3) void
 
 pub fn getQuaternionFromAxisAngle(v: Vec3, angle: f32) Quat
 {
-    return Quat{.v = mul(normalize(v), std.math.sin(angle * 0.5)), .w = std.math.cos(angle * 0.5)};
+    return Quat{.v = mul(normalize(v), std.math.sin(-angle * 0.5)), .w = std.math.cos(-angle * 0.5)};
 }
 
 

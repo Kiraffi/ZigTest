@@ -23,7 +23,6 @@ pub const Transform = extern struct
         const posMat = Math.getMatrixFromTranslation(self.pos);
         const rotMat = Math.getMatrixFromQuaternion(self.rot);
         const scaleMat = Math.getMatrixFromScale(self.scale);
-
         return Math.mul(Math.mul(posMat, rotMat), scaleMat);
     }
 };

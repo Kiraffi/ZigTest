@@ -42,7 +42,7 @@ void main()
 	uint col = vertexValues[gl_VertexID].col;
 	vec3 norm = vertexValues[gl_VertexID].norm;
 
-	gl_Position = (matrix_padding * vec4(pos, 1.0f)) * mvp;
+	gl_Position =  mvp * (matrix_padding * vec4(pos, 1.0f));
 	vec3 rotatedNorm =  (matrix_padding * vec4(norm, 0.0f)).xyz;
 
     uvec4 cu = uvec4((col & 255u), (col >> 8u) & 255u, (col >> 16u) & 255u, (col >> 24u) & 255u);

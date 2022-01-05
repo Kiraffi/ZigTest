@@ -79,19 +79,17 @@ pub fn main() anyerror!void
     if(!meshInit)
         return;
 
-
     var camera = transform.Transform{};
-    camera.pos[2] = 5.0;
+    camera.pos[2] = 10.0;
     //camera.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, Math.toRadians(180));
 
     var b = CameraFrameBuffer{};
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
 
-
     var trans = transform.Transform{};
-    trans.pos = Math.Vec3{1.0, -2.0, 3.0 };
-    trans.scale = Math.Vec3{2.0, 2.0, 2.0 };
-    //trans.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{1, 1, 0}, Math.toRadians(90));
+    trans.pos = Math.Vec3{5.0, -2.0, 2.0};
+    trans.scale = Math.Vec3{2.0, 2.0, 2.0};
+    trans.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{1, 1, 0}, Math.toRadians(90));
     while (eng.running)
     {
         try eng.update();
@@ -103,24 +101,26 @@ pub fn main() anyerror!void
         }
         if(eng.isDown(c.SDLK_j))
         {
-            const q = Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, -rotSpeed);
+            const camUp = Math.rotateVector(Math.Vec3{0, 1, 0}, camera.rot);
+            const q = Math.getQuaternionFromAxisAngle(camUp, rotSpeed);
             camera.rot = Math.mul(q, camera.rot);
         }
         if(eng.isDown(c.SDLK_l))
         {
-            const q = Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed);
+            const camUp = Math.rotateVector(Math.Vec3{0, 1, 0}, camera.rot);
+            const q = Math.getQuaternionFromAxisAngle(camUp, -rotSpeed);
             camera.rot = Math.mul(q, camera.rot);
         }
         if(eng.isDown(c.SDLK_i))
         {
             const camRight = Math.rotateVector(Math.Vec3{1, 0, 0}, camera.rot);
-            const q = Math.getQuaternionFromAxisAngle(camRight, -rotSpeed);
+            const q = Math.getQuaternionFromAxisAngle(camRight, rotSpeed);
             camera.rot = Math.mul(camera.rot, q);
         }
         if(eng.isDown(c.SDLK_k))
         {
             const camRight = Math.rotateVector(Math.Vec3{1, 0, 0}, camera.rot);
-            const q = Math.getQuaternionFromAxisAngle(camRight, rotSpeed);
+            const q = Math.getQuaternionFromAxisAngle(camRight, -rotSpeed);
             camera.rot = Math.mul(camera.rot, q);
         }
 
@@ -145,11 +145,11 @@ pub fn main() anyerror!void
         }
         if(eng.isDown(c.SDLK_q))
         {
-            camera.pos += Math.mul(camUp, moveSpeed);
+            camera.pos += Math.mul(camUp, -moveSpeed);
         }
         if(eng.isDown(c.SDLK_e))
         {
-            camera.pos += Math.mul(camUp, -moveSpeed);
+            camera.pos += Math.mul(camUp, moveSpeed);
         }
         const camMat = camera.getTransformAsCameraMatrix();
         b.camMat = camMat;
@@ -160,11 +160,11 @@ pub fn main() anyerror!void
         const zNear: f32 = 0.125;
         const projMat = Math.createPerspectiveMatrixRH( fovY, aspect, zNear, zFar );
         b.viewProj = projMat;
-        b.mvp = Math.mul(camMat, projMat);
+        b.mvp = Math.mul(projMat, camMat);
 
 
 
-        //trans.rot = Math.mul(Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed * 1.0), trans.rot);
+        trans.rot = Math.mul(Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed * 1.0), trans.rot);
         b.padding = trans.getModelMatrix();
 
 
@@ -200,7 +200,6 @@ pub fn main() anyerror!void
 
         eng.swapBuffers();
         try eng.endFrame();
-
     }
 }
 
