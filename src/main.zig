@@ -87,13 +87,69 @@ pub fn main() anyerror!void
     var b = CameraFrameBuffer{};
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
 
+
+    var trans = transform.Transform{};
+    trans.pos = Math.Vec3{1.0, -2.0, 3.0 };
+    trans.scale = Math.Vec3{2.0, 2.0, 2.0 };
+    //trans.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{1, 1, 0}, Math.toRadians(90));
     while (eng.running)
     {
         try eng.update();
-
+        const moveSpeed = @floatCast(f32, 5.0 * eng.dt);
+        const rotSpeed = @floatCast(f32, 1.0 * eng.dt);
         if(eng.wasPressed(c.SDLK_ESCAPE))
         {
             eng.running = false;
+        }
+        if(eng.isDown(c.SDLK_j))
+        {
+            const q = Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, -rotSpeed);
+            camera.rot = Math.mul(q, camera.rot);
+        }
+        if(eng.isDown(c.SDLK_l))
+        {
+            const q = Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed);
+            camera.rot = Math.mul(q, camera.rot);
+        }
+        if(eng.isDown(c.SDLK_i))
+        {
+            const camRight = Math.rotateVector(Math.Vec3{1, 0, 0}, camera.rot);
+            const q = Math.getQuaternionFromAxisAngle(camRight, -rotSpeed);
+            camera.rot = Math.mul(camera.rot, q);
+        }
+        if(eng.isDown(c.SDLK_k))
+        {
+            const camRight = Math.rotateVector(Math.Vec3{1, 0, 0}, camera.rot);
+            const q = Math.getQuaternionFromAxisAngle(camRight, rotSpeed);
+            camera.rot = Math.mul(camera.rot, q);
+        }
+
+        const camRight = Math.rotateVector(Math.Vec3{1, 0, 0}, camera.rot);
+        const camUp = Math.rotateVector(Math.Vec3{0, 1, 0}, camera.rot);
+        const camForward = Math.rotateVector(Math.Vec3{0, 0, 1}, camera.rot);
+        if(eng.isDown(c.SDLK_w))
+        {
+            camera.pos += Math.mul(camForward, -moveSpeed);
+        }
+        if(eng.isDown(c.SDLK_s))
+        {
+            camera.pos += Math.mul(camForward, moveSpeed);
+        }
+        if(eng.isDown(c.SDLK_a))
+        {
+            camera.pos += Math.mul(camRight, -moveSpeed);
+        }
+        if(eng.isDown(c.SDLK_d))
+        {
+            camera.pos += Math.mul(camRight, moveSpeed);
+        }
+        if(eng.isDown(c.SDLK_q))
+        {
+            camera.pos += Math.mul(camUp, moveSpeed);
+        }
+        if(eng.isDown(c.SDLK_e))
+        {
+            camera.pos += Math.mul(camUp, -moveSpeed);
         }
         const camMat = camera.getTransformAsCameraMatrix();
         b.camMat = camMat;
@@ -105,7 +161,11 @@ pub fn main() anyerror!void
         const projMat = Math.createPerspectiveMatrixRH( fovY, aspect, zNear, zFar );
         b.viewProj = projMat;
         b.mvp = Math.mul(camMat, projMat);
-        b.padding = Math.Mat44Identity;
+
+
+
+        //trans.rot = Math.mul(Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed * 1.0), trans.rot);
+        b.padding = trans.getModelMatrix();
 
 
 
@@ -116,11 +176,17 @@ pub fn main() anyerror!void
 
         {
             var printBuffer = std.mem.zeroes([32]u8);
-            const buf = try std.fmt.bufPrint(&printBuffer, "Something5", .{});
+            const buf = try std.fmt.bufPrint(&printBuffer, "Pos: {d:5.2}, {d:5.2}, {d:5.2}", .{ camera.pos[0],  camera.pos[1], camera.pos[2] });
             FontSystem.drawString(buf, Math.Vec2{400.0, 10.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
+            const buf2 = try std.fmt.bufPrint(&printBuffer, "CamR: {d:5.2}, {d:5.2}, {d:5.2}", .{ camRight[0],  camRight[1], camRight[2] });
+            FontSystem.drawString(buf2, Math.Vec2{400.0, 22.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
+            const buf3 = try std.fmt.bufPrint(&printBuffer, "CamU: {d:5.2}, {d:5.2}, {d:5.2}", .{ camUp[0],  camUp[1], camUp[2] });
+            FontSystem.drawString(buf3, Math.Vec2{400.0, 34.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
+            const buf4 = try std.fmt.bufPrint(&printBuffer, "CamF: {d:5.2}, {d:5.2}, {d:5.2}", .{ camForward[0],  camForward[1], camForward[2] });
+            FontSystem.drawString(buf4, Math.Vec2{400.0, 46.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
         }
 
-        c.glClear( c.GL_COLOR_BUFFER_BIT );
+        c.glClear( c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT );
         c.glViewport(0, 0, eng.width, eng.height);
 
         // Bind frame data

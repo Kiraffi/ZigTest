@@ -175,6 +175,7 @@ pub fn draw() void
     c.glBindTexture(c.GL_TEXTURE_2D, fontTexture.handle);
     c.glEnable(c.GL_BLEND);
     c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
+    c.glDisable(c.GL_DEPTH_TEST);
 
 
     c.glDrawArrays(

@@ -118,12 +118,14 @@ pub fn deinit() void
 pub fn draw() void
 {
     program.useShader();
+
     meshBuffer.bind(2);
     c.glBindVertexArray(vao);
     ibo.bind(0);
 
     c.glDisable(c.GL_BLEND);
-
+    c.glEnable(c.GL_DEPTH_TEST);
+    c.glDepthFunc(c.GL_LESS);
     c.glDrawElements( c.GL_TRIANGLES, @intCast(c_int, indexBufferStartIndex), c.GL_UNSIGNED_INT, null );
 }
 
@@ -137,44 +139,48 @@ fn getVertex(pos: Math.Vec3, col: u32, norm: Math.Vec3) Vertex
 fn addCube() void
 {
     var i = meshesVerticesCount;
-    const col = utils.getColor256(255, 255, 255, 255);
-    const col2 = utils.getColor256(255, 127, 63, 255);
+    const front = utils.getColor256(  0,   0, 255, 255);
+    const back =  utils.getColor256(  0,   0,  63, 255);
+    const left =  utils.getColor256( 63,   0,   0, 255);
+    const right = utils.getColor256(255,   0,   0, 255);
+    const top =   utils.getColor256(  0, 255,   0, 255);
+    const bot =   utils.getColor256(  0,  63,   0, 255);
 
     // Front
-    meshesVertices[i + 0] = getVertex(Math.Vec3{-0.5,  0.5, -0.5 }, col, Math.Vec3 {0.0, 0.0, -1.0});
-    meshesVertices[i + 1] = getVertex(Math.Vec3{ 0.5,  0.5, -0.5 }, col2, Math.Vec3 {0.0, 0.0, -1.0});
-    meshesVertices[i + 2] = getVertex(Math.Vec3{ 0.5, -0.5, -0.5 }, col, Math.Vec3 {0.0, 0.0, -1.0});
-    meshesVertices[i + 3] = getVertex(Math.Vec3{-0.5, -0.5, -0.5 }, col2, Math.Vec3 {0.0, 0.0, -1.0});
+    meshesVertices[i + 0] = getVertex(Math.Vec3{ 0.5,  0.5, 0.5 }, front, Math.Vec3 {0.0, 0.0,  1.0});
+    meshesVertices[i + 1] = getVertex(Math.Vec3{-0.5,  0.5, 0.5 }, front, Math.Vec3 {0.0, 0.0,  1.0});
+    meshesVertices[i + 2] = getVertex(Math.Vec3{-0.5, -0.5, 0.5 }, front, Math.Vec3 {0.0, 0.0,  1.0});
+    meshesVertices[i + 3] = getVertex(Math.Vec3{ 0.5, -0.5, 0.5 }, front, Math.Vec3 {0.0, 0.0,  1.0});
 
     // Back
-    meshesVertices[i + 4] = getVertex(Math.Vec3{ 0.5,  0.5, 0.5 }, col, Math.Vec3 {0.0, 0.0,  1.0});
-    meshesVertices[i + 5] = getVertex(Math.Vec3{-0.5,  0.5, 0.5 }, col, Math.Vec3 {0.0, 0.0,  1.0});
-    meshesVertices[i + 6] = getVertex(Math.Vec3{-0.5, -0.5, 0.5 }, col, Math.Vec3 {0.0, 0.0,  1.0});
-    meshesVertices[i + 7] = getVertex(Math.Vec3{ 0.5, -0.5, 0.5 }, col, Math.Vec3 {0.0, 0.0,  1.0});
+    meshesVertices[i + 4] = getVertex(Math.Vec3{-0.5,  0.5, -0.5 }, back, Math.Vec3 {0.0, 0.0, -1.0});
+    meshesVertices[i + 5] = getVertex(Math.Vec3{ 0.5,  0.5, -0.5 }, back, Math.Vec3 {0.0, 0.0, -1.0});
+    meshesVertices[i + 6] = getVertex(Math.Vec3{ 0.5, -0.5, -0.5 }, back, Math.Vec3 {0.0, 0.0, -1.0});
+    meshesVertices[i + 7] = getVertex(Math.Vec3{-0.5, -0.5, -0.5 }, back, Math.Vec3 {0.0, 0.0, -1.0});
 
     // Left
-    meshesVertices[i +  8] = getVertex(Math.Vec3{-0.5,  0.5,  0.5 }, col, Math.Vec3 {-1.0, 0.0, 0.0});
-    meshesVertices[i +  9] = getVertex(Math.Vec3{-0.5,  0.5, -0.5 }, col, Math.Vec3 {-1.0, 0.0, 0.0});
-    meshesVertices[i + 10] = getVertex(Math.Vec3{-0.5, -0.5, -0.5 }, col, Math.Vec3 {-1.0, 0.0, 0.0});
-    meshesVertices[i + 11] = getVertex(Math.Vec3{-0.5, -0.5,  0.5 }, col, Math.Vec3 {-1.0, 0.0, 0.0});
+    meshesVertices[i +  8] = getVertex(Math.Vec3{-0.5,  0.5,  0.5 }, left, Math.Vec3 {-1.0, 0.0, 0.0});
+    meshesVertices[i +  9] = getVertex(Math.Vec3{-0.5,  0.5, -0.5 }, left, Math.Vec3 {-1.0, 0.0, 0.0});
+    meshesVertices[i + 10] = getVertex(Math.Vec3{-0.5, -0.5, -0.5 }, left, Math.Vec3 {-1.0, 0.0, 0.0});
+    meshesVertices[i + 11] = getVertex(Math.Vec3{-0.5, -0.5,  0.5 }, left, Math.Vec3 {-1.0, 0.0, 0.0});
 
     // Right
-    meshesVertices[i + 12] = getVertex(Math.Vec3{0.5,  0.5, -0.5 }, col, Math.Vec3 {1.0, 0.0, 0.0});
-    meshesVertices[i + 13] = getVertex(Math.Vec3{0.5,  0.5,  0.5 }, col, Math.Vec3 {1.0, 0.0, 0.0});
-    meshesVertices[i + 14] = getVertex(Math.Vec3{0.5, -0.5,  0.5 }, col, Math.Vec3 {1.0, 0.0, 0.0});
-    meshesVertices[i + 15] = getVertex(Math.Vec3{0.5, -0.5, -0.5 }, col, Math.Vec3 {1.0, 0.0, 0.0});
+    meshesVertices[i + 12] = getVertex(Math.Vec3{0.5,  0.5, -0.5 }, right, Math.Vec3 {1.0, 0.0, 0.0});
+    meshesVertices[i + 13] = getVertex(Math.Vec3{0.5,  0.5,  0.5 }, right, Math.Vec3 {1.0, 0.0, 0.0});
+    meshesVertices[i + 14] = getVertex(Math.Vec3{0.5, -0.5,  0.5 }, right, Math.Vec3 {1.0, 0.0, 0.0});
+    meshesVertices[i + 15] = getVertex(Math.Vec3{0.5, -0.5, -0.5 }, right, Math.Vec3 {1.0, 0.0, 0.0});
 
     // Top
-    meshesVertices[i + 16] = getVertex(Math.Vec3{-0.5,  0.5,  0.5 }, col, Math.Vec3 {0.0, 1.0, 0.0});
-    meshesVertices[i + 17] = getVertex(Math.Vec3{ 0.5,  0.5,  0.5 }, col, Math.Vec3 {0.0, 1.0, 0.0});
-    meshesVertices[i + 18] = getVertex(Math.Vec3{ 0.5,  0.5, -0.5 }, col, Math.Vec3 {0.0, 1.0, 0.0});
-    meshesVertices[i + 19] = getVertex(Math.Vec3{-0.5,  0.5, -0.5 }, col, Math.Vec3 {0.0, 1.0, 0.0});
+    meshesVertices[i + 16] = getVertex(Math.Vec3{-0.5,  0.5,  0.5 }, top, Math.Vec3 {0.0, 1.0, 0.0});
+    meshesVertices[i + 17] = getVertex(Math.Vec3{ 0.5,  0.5,  0.5 }, top, Math.Vec3 {0.0, 1.0, 0.0});
+    meshesVertices[i + 18] = getVertex(Math.Vec3{ 0.5,  0.5, -0.5 }, top, Math.Vec3 {0.0, 1.0, 0.0});
+    meshesVertices[i + 19] = getVertex(Math.Vec3{-0.5,  0.5, -0.5 }, top, Math.Vec3 {0.0, 1.0, 0.0});
 
     // Bot
-    meshesVertices[i + 20] = getVertex(Math.Vec3{-0.5, -0.5, -0.5 }, col, Math.Vec3 {0.0, -1.0, 0.0});
-    meshesVertices[i + 21] = getVertex(Math.Vec3{ 0.5, -0.5, -0.5 }, col, Math.Vec3 {0.0, -1.0, 0.0});
-    meshesVertices[i + 22] = getVertex(Math.Vec3{ 0.5, -0.5,  0.5 }, col, Math.Vec3 {0.0, -1.0, 0.0});
-    meshesVertices[i + 23] = getVertex(Math.Vec3{-0.5, -0.5,  0.5 }, col, Math.Vec3 {0.0, -1.0, 0.0});
+    meshesVertices[i + 20] = getVertex(Math.Vec3{-0.5, -0.5, -0.5 }, bot, Math.Vec3 {0.0, -1.0, 0.0});
+    meshesVertices[i + 21] = getVertex(Math.Vec3{ 0.5, -0.5, -0.5 }, bot, Math.Vec3 {0.0, -1.0, 0.0});
+    meshesVertices[i + 22] = getVertex(Math.Vec3{ 0.5, -0.5,  0.5 }, bot, Math.Vec3 {0.0, -1.0, 0.0});
+    meshesVertices[i + 23] = getVertex(Math.Vec3{-0.5, -0.5,  0.5 }, bot, Math.Vec3 {0.0, -1.0, 0.0});
 
 
     var ind = meshesIndicesCount;

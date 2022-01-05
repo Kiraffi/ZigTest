@@ -42,14 +42,13 @@ void main()
 	uint col = vertexValues[gl_VertexID].col;
 	vec3 norm = vertexValues[gl_VertexID].norm;
 
-	mat4 finalMat = mvp * matrix_padding;
-	gl_Position = vec4(pos, 1.0f) * finalMat;
+	gl_Position = (matrix_padding * vec4(pos, 1.0f)) * mvp;
 	vec3 rotatedNorm =  (matrix_padding * vec4(norm, 0.0f)).xyz;
 
     uvec4 cu = uvec4((col & 255u), (col >> 8u) & 255u, (col >> 16u) & 255u, (col >> 24u) & 255u);
 
-	vec3 sunDir = vec3(0.5f, -1.0f, 0.5f);
-	colOut = vec4(cu.xyz * 0.75f + 0.25f * (-dot(rotatedNorm, sunDir)), cu.w) / 255.0f;
+	vec3 sunDir = normalize(vec3(0.5f, -1.0f, 0.5f));
+	colOut = vec4(cu.xyz * 0.95f + 0.05f * (-dot(rotatedNorm, sunDir)), cu.w) / 255.0f;
 
 	posOut = vec4(pos, 1.0f);
 	normOut = vec4(norm, 1.0f);

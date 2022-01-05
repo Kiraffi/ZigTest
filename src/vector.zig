@@ -20,7 +20,7 @@ pub const Mat44 = Vector(16, f32);
 pub const Mat44Identity =  Mat44{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
 pub const Quat = extern struct
 {
-    v: Vec3 = Vec3{0.0, 0.0, 0.0 },
+    v: Vec3 = Vec3{0.0, 0.0, 0.0},
     w: f32 = 1.0,
 };
 
@@ -174,10 +174,10 @@ pub fn mul(v1: anytype, v2: anytype ) ReturnType(@TypeOf(v1), @TypeOf(v2))
                 return r;
             },
             Quat => {
-                const v3 = add(v2, v1.w) + add(v1, v2.w);
+                const v3 = mul(v2.v, v1.w) + mul(v1.v, v2.w);
                 const v4 = cross(v1.v, v2.v);
                 const v5 = v3 + v4;
-                return Quat{.v = v5, .w = v1.w * v2.w - dot(Vec3, v1.v, v2.v) };
+                return Quat{.v = v5, .w = v1.w * v2.w - dot(v1.v, v2.v) };
             },
             else => { unreachable; }
         }
@@ -284,7 +284,7 @@ pub fn createPerspectiveMatrixRH(fovRad: f32, aspectRatio: f32, nearPlane: f32, 
 
     var result = Mat44Identity;
     result[0] = xScale;
-    result[5] = yScale;
+    result[5] = -yScale;
 
     result[10] = -fRange;
     result[11] = -1.0;
@@ -349,6 +349,66 @@ pub fn transposeMat44(v1: Mat44) Mat44
 }
 
 
+pub fn getMatrixFromRotation(right: Vec3, up: Vec3, forward: Vec3) Mat44
+{
+    var result = Mat44Identity;
+
+    result[0] = right[0];
+    result[1] = right[1];
+    result[2] = right[2];
+
+    result[4] = up[0];
+    result[5] = up[1];
+    result[6] = up[2];
+
+    result[8] = forward[0];
+    result[9] = forward[1];
+    result[10] = forward[2];
+
+    return result;
+}
+
+pub fn getMatrixFromQuaternion(quat: Quat) Mat44
+{
+    var result = Mat44Identity;
+    result[0] = 1.0 - 2.0 * quat.v[1] * quat.v[1] - 2.0 * quat.v[2] * quat.v[2];
+    result[1] = 2.0 * quat.v[0] * quat.v[1] - 2.0 * quat.w * quat.v[2];
+    result[2] = 2.0 * quat.v[0] * quat.v[2] + 2.0 * quat.w * quat.v[1];
+
+    result[4] = 2.0 * quat.v[0] * quat.v[1] + 2.0 * quat.w * quat.v[2];
+    result[5] = 1.0 - 2.0 * quat.v[0] * quat.v[0] - 2.0 * quat.v[2] * quat.v[2];
+    result[6] = 2.0 * quat.v[1] * quat.v[2] - 2.0 * quat.w * quat.v[0];
+
+    result[8] = 2.0 * quat.v[0] * quat.v[2] - 2.0 * quat.w * quat.v[1];
+    result[9] = 2.0 * quat.v[1] * quat.v[2] + 2.0 * quat.w * quat.v[0];
+    result[10] = 1.0 - 2.0 * quat.v[0] * quat.v[0] - 2.0 * quat.v[1] * quat.v[1];
+
+    return result;
+}
+
+pub fn getMatrixFromScale(scale: Vec3) Mat44
+{
+    var result = Mat44Identity;
+    result[0] = scale[0];
+    result[5] = scale[1];
+    result[10] = scale[2];
+
+    return result;
+}
+
+pub fn getMatrixFromTranslation(pos: Vec3) Mat44
+{
+    var result = Mat44Identity;
+    result[3] = pos[0];
+    result[7] = pos[1];
+    result[11] = pos[2];
+
+    return result;
+}
+
+
+
+
 
 pub fn rotateVector(v: Vec3, q: Quat) Vec3
 {
@@ -359,17 +419,17 @@ pub fn rotateVector(v: Vec3, q: Quat) Vec3
 
 pub fn getAxis(quat: Quat, right: *Vec3, up: *Vec3, forward: *Vec3) void
 {
-    right.x = 1.0 - 2.0 * quat.v.y * quat.v.y - 2.0 * quat.v.z * quat.v.z;
-    right.y = 2.0 * quat.v.x * quat.v.y + 2.0 * quat.w * quat.v.z;
-    right.z = 2.0 * quat.v.x * quat.v.z - 2.0 * quat.w * quat.v.y;
+    right.x = 1.0 - 2.0 * quat.v[1] * quat.v[1] - 2.0 * quat.v[2] * quat.v[2];
+    right.y = 2.0 * quat.v[0] * quat.v[1] + 2.0 * quat.w * quat.v[2];
+    right.z = 2.0 * quat.v[0] * quat.v[2] - 2.0 * quat.w * quat.v[1];
 
-    up.x = 2.0 * quat.v.x * quat.v.y - 2.0 * quat.w * quat.v.z;
-    up.y = 1.0 - 2.0 * quat.v.x * quat.v.x - 2.0 * quat.v.z * quat.v.z;
-    up.z = 2.0 * quat.v.y * quat.v.z + 2.0 * quat.w * quat.v.x;
+    up.x = 2.0 * quat.v[0] * quat.v[1] - 2.0 * quat.w * quat.v[2];
+    up.y = 1.0 - 2.0 * quat.v[0] * quat.v[0] - 2.0 * quat.v[2] * quat.v[2];
+    up.z = 2.0 * quat.v[1] * quat.v[2] + 2.0 * quat.w * quat.v[0];
 
-    forward.x = 2.0 * quat.v.x * quat.v.z + 2.0 * quat.w * quat.v.y;
-    forward.y = 2.0 * quat.v.y * quat.v.z - 2.0 * quat.w * quat.v.x;
-    forward.z = 1.0 - 2.0 * quat.v.x * quat.v.x - 2.0 * quat.v.y * quat.v.y;
+    forward.x = 2.0 * quat.v[0] * quat.v[2] + 2.0 * quat.w * quat.v[1];
+    forward.y = 2.0 * quat.v[1] * quat.v[2] - 2.0 * quat.w * quat.v[0];
+    forward.z = 1.0 - 2.0 * quat.v[0] * quat.v[0] - 2.0 * quat.v[1] * quat.v[1];
 }
 
 

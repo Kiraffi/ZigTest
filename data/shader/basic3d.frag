@@ -10,5 +10,5 @@ layout (location = 2) in vec4 normOut;
 void main()
 {
 	outColor.a = 1.0f;
-	outColor.rgb = vec3(1.0f); //colIn.rgb;
+	outColor.rgb = colIn.rgb;
 }

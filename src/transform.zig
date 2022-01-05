@@ -17,6 +17,15 @@ pub const Transform = extern struct
 
         return (Math.createMatrixFromLookAt(self.pos, self.pos + forwardDir, upDir));
     }
+
+    pub fn getModelMatrix(self: *const Transform) Math.Mat44
+    {
+        const posMat = Math.getMatrixFromTranslation(self.pos);
+        const rotMat = Math.getMatrixFromQuaternion(self.rot);
+        const scaleMat = Math.getMatrixFromScale(self.scale);
+
+        return Math.mul(Math.mul(posMat, rotMat), scaleMat);
+    }
 };
 
 
