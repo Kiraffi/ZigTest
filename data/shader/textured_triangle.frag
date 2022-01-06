@@ -10,7 +10,7 @@ void main()
 {
     vec4 sampledColor = texture(ourTexture, vTexCoord);
     if(sampledColor.a > 0.25f)
-        sampledColor.rgba = vec4(1.0f);
+        sampledColor.a = 1.0f;
     else
         sampledColor.a = 0.0f;
     outColor = sampledColor;
