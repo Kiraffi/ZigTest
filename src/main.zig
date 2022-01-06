@@ -10,6 +10,7 @@ const utils = @import("utils.zig");
 const FontSystem = @import("fontsystem.zig");
 const MeshSystem = @import("meshsystem.zig");
 const rendertotexture = @import("rendertotexture.zig");
+const compute = @import("compute.zig");
 
 const c = @cImport({
     @cInclude("SDL.h");
@@ -83,6 +84,11 @@ pub fn main() anyerror!void
     const rendertotextureInit = rendertotexture.init();
     defer rendertotexture.deinit();
     if(!rendertotextureInit)
+        return;
+
+    const computeInit = compute.init();
+    defer compute.deinit();
+    if(!computeInit)
         return;
 
     var camera = transform.Transform{};
@@ -194,7 +200,7 @@ pub fn main() anyerror!void
 
         rendertotexture.draw();
 
-
+        compute.draw(rendertotexture.renderTarget);
         c.glClear( c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT );
         c.glViewport(0, 0, eng.width, eng.height);
 
@@ -202,6 +208,8 @@ pub fn main() anyerror!void
         frameDataBuffer.bind(0);
         cameraDataBuffer.bind(1);
         rendertotexture.renderTextureToBack();
+
+
         MeshSystem.draw();
 
         FontSystem.draw();

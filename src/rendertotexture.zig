@@ -22,7 +22,7 @@ const fragmentShaderSource = @embedFile("../data/shader/triangle.frag");
 const vertexFullscreenShaderSource = @embedFile("../data/shader/textured_fullscreen.vert");
 const fragmentTextureShaderSource = @embedFile("../data/shader/textured_triangle.frag");
 
-var renderTarget = ogl.Texture{};
+pub var renderTarget = ogl.Texture{};
 var depthTarget: c.GLuint = 0;
 var fbo: c.GLuint = 0;
 var vao: c.GLuint = 0;

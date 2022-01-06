@@ -84,6 +84,38 @@ pub const Shader = struct
 
         return shader;
     }
+    pub fn createComputeProgram(computeText: []const u8) Shader
+    {
+        var shader = Shader {.program = 0};
+        const computeShader = compileShader(computeText, c.GL_COMPUTE_SHADER);
+        if(computeShader == 0)
+        {
+            print("Failed to compile compute shader.\n", .{});
+            return shader;
+        }
+        defer c.glDeleteShader(computeShader);
+
+        var programID = c.glCreateProgram();
+        if(programID == 0)
+        {
+            panic("Failed to create shader program.\n", .{});
+            return shader;
+        }
+
+        //Attach vertex and fragment shader to program
+        c.glAttachShader( programID, computeShader );
+        c.glLinkProgram( programID );
+        shader.program = programID;
+        var programSuccess = c.GL_TRUE;
+        c.glGetProgramiv(programID, c.GL_LINK_STATUS, &programSuccess);
+        if(programSuccess != c.GL_TRUE)
+        {
+            panic("Error linking program\n", .{});
+            return shader;
+        }
+
+        return shader;
+    }
     pub fn isValid(self: *const Shader) bool
     {
         return self.program != 0;
