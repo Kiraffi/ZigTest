@@ -189,24 +189,63 @@ pub const Texture = struct
     }
 };
 
+pub const RenderTarget = struct
+{
+    renderTarget: c.GLuint = 0,
+
+    textureType: c.GLuint = 0,
+    pixelType: c.GLuint = 0,
+
+    width: i32 = 0,
+    height: i32 = 0,
+
+    pub fn new(width: i32, height: i32, textureType: c.GLenum, pixelType: c.GLenum) RenderTarget
+    {
+        const handle = generateRenderTargetHandle(width, height, textureType, pixelType);
+        return RenderTarget { .renderTarget = handle, .width = width, .height = height, .textureType = textureType, .pixelType = pixelType };
+    }
+
+    pub fn resize(self: *RenderTarget, width: i32, height: i32) void
+    {
+        self.deleteRenderTarget();
+        self.handle = generateRenderTargetHandle(width, height, self.textureType, self.pixelType);
+        self.width = width;
+        self.height = height;
+    }
+
+    pub fn deleteRenderTarget(self: *RenderTarget) void
+    {
+        if(self.renderTarget != 0)
+        {
+            c.glDeleteRenderbuffers(1, &self.renderTarget);
+            self.renderTarget = 0;
+        }
+    }
+
+    pub fn isValid(self: *const RenderTarget) bool
+    {
+        return self.handle != 0;
+    }
+};
+
 
 fn generateTextureHandle(width: i32, height: i32, textureType: c.GLenum, pixelType: c.GLenum) c.GLuint
 {
     var handle: c.GLuint = 0;
     c.glCreateTextures(textureType, 1, &handle);
     c.glTextureStorage2D(handle, 1, pixelType, width, height);
-    //gl::TextureSubImage2D(handle, 0, 0, 0, width, height, gl::BGRA, gl::UNSIGNED_BYTE, font_tex.as_ptr() as *const gl::GLvoid);
-
-    //gl::GenTextures(1, &mut handle);
-    //gl::BindTexture(texture_type, handle);
-    //gl::TexStorage2D(texture_type, 1, pixel_type, width, height);
-
-    //gl::TexSubImage2D(gl::TEXTURE_2D, 0, 0, 0, texture_width, texture_height, gl::BGRA, gl::UNSIGNED_BYTE, font_tex.as_ptr() as *const gl::GLvoid);
     return handle;
 }
 
-
-
+// not sure if this actually works anything else than depths
+fn generateRenderTargetHandle(width: i32, height: i32, textureType: c.GLenum, pixelType: c.GLenum) c.GLuint
+{
+    _ = textureType;
+    var handle: c.GLuint = 0;
+    c.glCreateRenderbuffers(1, &handle);
+    c.glNamedRenderbufferStorage(handle, pixelType, width, height);
+    return handle;
+}
 
 pub const ShaderBuffer = struct
 {
@@ -251,4 +290,101 @@ pub const ShaderBuffer = struct
         self.bufferId = 0;
     }
 
+};
+
+pub const RenderPass = struct
+{
+    fbo: c.GLuint = 0,
+    renderTargetCount: u32 = 0,
+    depthTargetCount: u32 = 0,
+
+    width: i32 = 0,
+    height: i32 = 0,
+
+
+    // Bit wrong since depths should sometimes be readable too, and textures could be rendertargets, but
+    // trying to simplify stuff....
+    pub fn createRenderPass(textures: []const Texture, depthTargets: []const RenderTarget) RenderPass
+    {
+        // If no texture nor depth target set width and height to 4.
+        const width = if(textures.len > 0) textures[0].width else if(depthTargets.len > 0) depthTargets[0].width else 4;
+        const height = if(textures.len > 0) textures[0].height else if(depthTargets.len > 0) depthTargets[0].height else 4;
+        var renderPass = RenderPass{};
+        if(width <= 0 or height <= 0)
+        {
+            panic("Trying to create invalid size render target.", .{});
+            return renderPass;
+        }
+        if(textures.len > 8)
+        {
+            panic("Cannot have more than 8 teture write targets.", .{});
+            return renderPass;
+        }
+
+        for(textures) |texture|
+        {
+            if(texture.width != width or texture.height != height)
+            {
+                panic("Mismatching texture sizes.", .{});
+                return renderPass;
+            }
+        }
+        for(depthTargets) | depthTarget |
+        {
+            if(depthTarget.width != width or depthTarget.height != height)
+            {
+                panic("Mismatching texture sizes.", .{});
+                return renderPass;
+            }
+        }
+
+        // The framebuffer, which regroups 0, 1, or more textures, and 0 or 1 depth buffer.
+        c.glCreateFramebuffers(1, &renderPass.fbo);
+        if(depthTargets.len == 1)
+        {
+            c.glNamedFramebufferRenderbuffer(renderPass.fbo, c.GL_DEPTH_ATTACHMENT, c.GL_RENDERBUFFER, depthTargets[0].renderTarget);
+
+        }
+
+        var drawBuf: [8]c.GLenum = .{
+            c.GL_NONE, c.GL_NONE, c.GL_NONE, c.GL_NONE,
+            c.GL_NONE, c.GL_NONE, c.GL_NONE, c.GL_NONE
+        };
+
+        for(textures) |texture, i|
+        {
+            const ii = @intCast(c_int, i);
+            const colAtt = @intCast(c_uint, c.GL_COLOR_ATTACHMENT0 + ii);
+            c.glNamedFramebufferTexture(renderPass.fbo, colAtt, texture.handle, 0);
+            drawBuf[i] = colAtt;
+        }
+        c.glNamedFramebufferDrawBuffers(renderPass.fbo, @intCast(c_int, textures.len), &drawBuf);
+
+        const status = c.glCheckNamedFramebufferStatus(renderPass.fbo, c.GL_FRAMEBUFFER);
+        if(status != c.GL_FRAMEBUFFER_COMPLETE)
+        {
+            panic("failed to create render pass", .{});
+            renderPass.deleteRenderPass();
+            return renderPass;
+        }
+
+        renderPass.width = width;
+        renderPass.height = height;
+        renderPass.renderTargetCount = @intCast(u32, textures.len);
+        renderPass.depthTargetCount = @intCast(u32, depthTargets.len);
+
+        return renderPass;
+    }
+    pub fn bind(self: *RenderPass) void
+    {
+        c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.fbo);
+    }
+    pub fn deleteRenderPass(self: *RenderPass) void
+    {
+        if(self.fbo != 0)
+        {
+            c.glDeleteFramebuffers(1, &self.fbo);
+            self.fbo = 0;
+        }
+    }
 };
