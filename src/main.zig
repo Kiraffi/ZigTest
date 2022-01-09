@@ -39,7 +39,7 @@ const FrameData = extern struct
 
 pub fn main() anyerror!void
 {
-    var eng = try engine.Engine.init(640, 480, "Test sdl ogl1");
+    var eng = try engine.Engine.init(1600, 900, "Test sdl ogl1", true);
     defer eng.deinit();
 
     var frameDataBuffer = ogl.ShaderBuffer{};
@@ -121,7 +121,9 @@ pub fn main() anyerror!void
     defer depthTarget.deleteRenderTarget();
     defer renderPass.deleteRenderPass();
 
-
+    var vao: c.GLuint = 0;
+    c.glCreateVertexArrays(1, &vao);
+    defer c.glDeleteVertexArrays(1, &vao);
 
     var camera = transform.Transform{};
     camera.pos[2] = 10.0;
@@ -134,6 +136,9 @@ pub fn main() anyerror!void
     trans.pos = Math.Vec3{5.0, -2.0, 2.0};
     trans.scale = Math.Vec3{2.0, 2.0, 2.0};
     trans.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{1, 1, 0}, Math.toRadians(90));
+
+    c.glBindVertexArray(vao);
+
     while (eng.running)
     {
         try eng.update();
@@ -208,7 +213,7 @@ pub fn main() anyerror!void
 
 
 
-        trans.rot = Math.mul(Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed * 1.0), trans.rot);
+        trans.rot = Math.normalize(Math.mul(Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed * 1.0), trans.rot));
         b.padding = trans.getModelMatrix();
 
 
@@ -266,6 +271,6 @@ pub fn main() anyerror!void
         eng.swapBuffers();
         try eng.endFrame();
     }
-
+    
 }
 

@@ -99,19 +99,18 @@ pub const Engine = struct
         self.lastDtNanos = self.timer.lap();
         self.totalNanos += self.lastDtNanos;
         self.dt = @intToFloat(f32, self.lastDtNanos) / 1_000_000_000.0;
-        if(self.frameIndex % 10 == 0)
+        if(self.frameIndex % 20 == 0)
         {
-
-            const fps = if(self.dt > 0.0) @floatToInt(u32, 1.0 / self.dt) else 1000;
+            const fps = if(self.dt > 0.0) 1.0 / self.dt else 1000.0;
             var printBuffer = std.mem.zeroes([128]u8);
-            const res = try std.fmt.bufPrint(&printBuffer, "Time: {}, Fps: {}", .{self.dt, fps});
+            const res = try std.fmt.bufPrint(&printBuffer, "Time: {d:3.3}ms, Fps: {d:3.2}", .{self.dt * 1000.0, fps});
             self.setTitle(res);
         }
 
-        if(!self.vsync or !flipHappened)
+        if(!flipHappened or !self.vsync)
         {
             // windows timeBeginPeriod
-            c.SDL_Delay(5);
+            c.SDL_Delay(1);
         }
         flipHappened = false;
         self.frameIndex += 1;
@@ -119,7 +118,7 @@ pub const Engine = struct
     }
 
 
-    pub fn init(width: c_int, height: c_int, title: []const u8) anyerror!Engine
+    pub fn init(width: c_int, height: c_int, title: []const u8, useDebug: bool) anyerror!Engine
     {
         if(c.SDL_Init(c.SDL_INIT_VIDEO) < 0)
         {
@@ -131,10 +130,17 @@ pub const Engine = struct
         _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_MINOR_VERSION, 5 );
         _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE );
 
-        _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_DEBUG_FLAG);
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_DOUBLEBUFFER, 1 );
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_RED_SIZE, 8 );
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_GREEN_SIZE, 8 );
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_BLUE_SIZE, 8 );
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_DEPTH_SIZE, 0 );
+
+        if(useDebug)
+            _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_DEBUG_FLAG);
 
         var window = c.SDL_CreateWindow(title.ptr, c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, width, height,
-            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_SHOWN );
+            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_SHOWN); // | c.SDL_WINDOW_BORDERLESS ); 
         if( window == null)
         {
             panic("SDL window cannot be created. SDL_error: {s}\n", .{ c.SDL_GetError() });
@@ -156,21 +162,23 @@ pub const Engine = struct
         print("Renderer: {s}\n", .{c.glGetString(c.GL_RENDERER)});
         print("Version:  {s}\n", .{c.glGetString(c.GL_VERSION)});
 
-        c.glEnable(c.GL_DEBUG_OUTPUT);
-        c.glEnable(c.GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        c.glDebugMessageCallback(ogl.openglCallbackFunction, null);
-        c.glDebugMessageControl(c.GL_DONT_CARE, c.GL_DONT_CARE, c.GL_DONT_CARE, 0, null, 1);
-
+        if(useDebug)
+        {
+            c.glEnable(c.GL_DEBUG_OUTPUT);
+            c.glEnable(c.GL_DEBUG_OUTPUT_SYNCHRONOUS);
+            c.glDebugMessageCallback(ogl.openglCallbackFunction, null);
+            c.glDebugMessageControl(c.GL_DONT_CARE, c.GL_DONT_CARE, c.GL_DONT_CARE, 0, null, 1);
+        }
         // Make top left corner 0,0, requires ogl4.5
         //c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
-        c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
+        //c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
 
         var engine = Engine{.width = width, .height = height,
             .timer = try std.time.Timer.start(), .dt = 0.0, .lastDtNanos = 0, .totalNanos = 0,
             .buttons = std.mem.zeroes([512]u8), .halfPresses = std.mem.zeroes([512]u8),
             .running = true, .frameIndex = 0,
             .window = window, .context = context, .vsync = false };
-        try engine.setVSync(true);
+        try engine.setVSync(false);
 
         return engine;
     }

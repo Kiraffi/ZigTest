@@ -22,18 +22,17 @@ const MAX_MESHES: u32 = 512;
 var meshes: [MAX_MESHES]Mesh = undefined;
 var meshCount: u32 = 0;
 
-const MAX_INDICES: u32 = 1_048_576 * 32;
+const MAX_INDICES: u32 = 1_048_576 * 8;
 var meshesIndices: [MAX_INDICES]u32 = undefined;
 var meshesIndicesCount: u32 = 0;
 
-const MAX_VERTICES: u32 = 1_048_576 * 8;
+const MAX_VERTICES: u32 = 1_048_576 * 1;
 var meshesVertices: [MAX_VERTICES]Vertex = undefined;
 var meshesVerticesCount: u32 = 0;
 
 var meshBuffer = ogl.ShaderBuffer{};
 var ibo = ogl.ShaderBuffer{};
 var program = ogl.Shader{};
-var vao: c.GLuint = 0;
 
 const Vertex = extern struct
 {
@@ -69,12 +68,6 @@ pub fn getMesh(index: u32) Mesh
 
 pub fn init() bool
 {
-    c.glGenBuffers(1, &vao);
-    c.glGenVertexArrays(1, &vao);
-    c.glBindVertexArray(vao);
-
-    print("size of vertex: {}\n", .{@sizeOf(Vertex)});
-
     program = ogl.Shader.createGraphicsProgram(vertexShaderSource, fragmentShaderSource);
     if(program.program == 0)
     {
@@ -91,14 +84,12 @@ pub fn init() bool
         return false;
     }
 
-    meshBuffer = ogl.ShaderBuffer.createBuffer(c.GL_SHADER_STORAGE_BUFFER, vertexBufferOffset, &meshesVertices, c.GL_DYNAMIC_COPY);
+    meshBuffer = ogl.ShaderBuffer.createBuffer(c.GL_SHADER_STORAGE_BUFFER, vertexBufferOffset, &meshesVertices, c.GL_STATIC_DRAW);//GL_DYNAMIC_COPY);
     if(!meshBuffer.isValid())
     {
         panic("Failed to create meshBuffer\n", .{});
         return false;
     }
-    c.glBindVertexArray(0);
-
 
     return true;
 }
@@ -108,10 +99,6 @@ pub fn deinit() void
     ibo.deleteBuffer();
     meshBuffer.deleteBuffer();
     program.deleteProgram();
-    if(vao != 0)
-        c.glDeleteVertexArrays(1, &vao);
-    vao = 0;
-
 }
 
 
@@ -120,7 +107,6 @@ pub fn draw() void
     program.useShader();
 
     meshBuffer.bind(2);
-    c.glBindVertexArray(vao);
     ibo.bind(0);
 
     c.glDisable(c.GL_BLEND);

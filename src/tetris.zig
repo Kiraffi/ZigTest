@@ -308,7 +308,7 @@ const Blocks  = [_]Block{
 
 pub fn main() anyerror!void
 {
-    var eng = try engine.Engine.init(640, 480, "Tetris Zig");
+    var eng = try engine.Engine.init(640, 480, "Tetris Zig", true);
     defer eng.deinit();
 
 
@@ -322,11 +322,8 @@ pub fn main() anyerror!void
 
 
     var vao: c.GLuint = 0;
-    c.glGenBuffers(1, &vao);
-    c.glGenVertexArrays(1, &vao);
+    c.glCreateVertexArrays(1, &vao);
     defer c.glDeleteVertexArrays(1, &vao);
-    c.glBindVertexArray(vao);
-
 
     // IBO
     var ibo = ogl.ShaderBuffer{};
@@ -337,10 +334,10 @@ pub fn main() anyerror!void
         {
             iboData[i * 6 + 0] = i * 4 + 0;
             iboData[i * 6 + 1] = i * 4 + 1;
-            iboData[i * 6 + 2] = i * 4 + 3;
+            iboData[i * 6 + 2] = i * 4 + 2;
             iboData[i * 6 + 3] = i * 4 + 0;
-            iboData[i * 6 + 4] = i * 4 + 3;
-            iboData[i * 6 + 5] = i * 4 + 2;
+            iboData[i * 6 + 4] = i * 4 + 2;
+            iboData[i * 6 + 5] = i * 4 + 3;
         }
 
         ibo = ogl.ShaderBuffer.createBuffer(c.GL_ELEMENT_ARRAY_BUFFER, iboData.len * @sizeOf(c.GLuint), &iboData, c.GL_STATIC_DRAW);
@@ -409,6 +406,8 @@ pub fn main() anyerror!void
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
     const ran = @intCast(u64, std.time.nanoTimestamp() & 0xffff_ffff_ffff_ffff);
     var gameState = GameState.new(ran);
+    
+    c.glBindVertexArray(vao);
 
     while (eng.running)
     {
@@ -588,7 +587,6 @@ pub fn main() anyerror!void
 
 
         program.useShader();
-        c.glBindVertexArray(vao);
         // Bind frame data
         frameDataBuffer.bind(0);
         c.glDisable(c.GL_BLEND);

@@ -26,14 +26,14 @@ layout (location = 1) out vec2 vTexCoord;
 
 void main()
 {
-    uint vertId = gl_VertexID / 6;
-    uint v = gl_VertexID % 6;
+    uint vertId = gl_VertexID / 4;
+    uint v = gl_VertexID % 4;
     vec2 pp = vec2(0.5f, 0.5f);
-    if(v == 0 || v == 1 || v == 5)
+    if(v == 0 || v == 1)
     {
         pp.y = -0.5f;
     }
-    if(v == 0 || v == 4 || v == 5)
+    if(v == 0 || v == 3)
     {
         pp.x = -0.5f;
     }

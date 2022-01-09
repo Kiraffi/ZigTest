@@ -23,21 +23,19 @@ const vertexFullscreenShaderSource = @embedFile("../data/shader/textured_fullscr
 const fragmentTextureShaderSource = @embedFile("../data/shader/textured_triangle.frag");
 
 pub var renderTarget = ogl.Texture{};
-pub var renderTarget2 = ogl.Texture{};
-var depthTarget = ogl.RenderTarget{};
+//pub var renderTarget2 = ogl.Texture{};
+//var depthTarget = ogl.RenderTarget{};
 
 var renderPass = ogl.RenderPass{};
 
-var vao: c.GLuint = 0;
 var program = ogl.Shader{};
 var fullscreenProgram = ogl.Shader{};
 
-const renderWidth: i32 = 1024;
-const renderHeight: i32 = 768;
+const renderWidth: i32 = 512; // 1024 ;
+const renderHeight: i32 = 512; //768;
 
 pub fn init() bool
 {
-    c.glCreateVertexArrays(1, &vao);
     program = ogl.Shader.createGraphicsProgram(vertexShaderSource, fragmentShaderSource);
     if(program.program == 0)
     {
@@ -57,15 +55,9 @@ pub fn init() bool
     c.glTextureParameteri(renderTarget.handle, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
     c.glTextureParameteri(renderTarget.handle, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
 
-    renderTarget2 = ogl.Texture.new(renderWidth, renderHeight, c.GL_TEXTURE_2D, c.GL_RGBA8);
-    c.glTextureParameteri(renderTarget2.handle, c.GL_TEXTURE_MIN_FILTER, c.GL_NEAREST);
-    c.glTextureParameteri(renderTarget2.handle, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
-    c.glTextureParameteri(renderTarget2.handle, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
-    c.glTextureParameteri(renderTarget2.handle, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
-
-    depthTarget = ogl.RenderTarget.new(renderWidth, renderHeight, c.GL_TEXTURE_2D, c.GL_DEPTH_COMPONENT);
-    const rTargets = [_]ogl.Texture{renderTarget, renderTarget2};
-    const dTargets = [_]ogl.RenderTarget{depthTarget};
+    //depthTarget = ogl.RenderTarget.new(renderWidth, renderHeight, c.GL_TEXTURE_2D, c.GL_DEPTH_COMPONENT);
+    const rTargets = [_]ogl.Texture{renderTarget};
+    const dTargets = [_]ogl.RenderTarget{};
 
     renderPass = ogl.RenderPass.createRenderPass(&rTargets, &dTargets);
     return true;
@@ -77,7 +69,7 @@ pub fn deinit() void
     fullscreenProgram.deleteProgram();
     renderPass.deleteRenderPass();
     renderTarget.deleteTexture();
-    depthTarget.deleteRenderTarget();
+    //depthTarget.deleteRenderTarget();
 }
 
 pub fn draw() void
@@ -85,14 +77,12 @@ pub fn draw() void
     program.useShader();
 
     renderPass.bind();
-    c.glBindVertexArray(vao);
 
     c.glClear( c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT );
     c.glViewport(0, 0, renderWidth, renderHeight);
     c.glDisable(c.GL_DEPTH_TEST);
 
     c.glDrawArrays(c.GL_TRIANGLES, 0, 6 * 4);
-    c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
 }
 
 pub fn renderTextureToBack() void

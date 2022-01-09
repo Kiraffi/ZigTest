@@ -41,7 +41,6 @@ var ibo = ogl.ShaderBuffer{};
 var program = ogl.Shader{};
 var fontTexture = ogl.Texture{};
 
-var vao: c.GLuint = 0;
 
 var writternLetters: u32 = 0;
 
@@ -53,9 +52,6 @@ pub fn deinit() void
     letterBuffer.deleteBuffer();
     ibo.deleteBuffer();
 
-    if(vao != 0)
-        c.glDeleteVertexArrays(1, &vao);
-    vao = 0;
     program.deleteProgram();
 }
 
@@ -105,10 +101,6 @@ pub fn init() anyerror!bool
         MAX_LETTERS * @sizeOf(LetterData), null, c.GL_DYNAMIC_COPY
     );
 
-    c.glGenBuffers(1, &vao);
-    c.glGenVertexArrays(1, &vao);
-    c.glBindVertexArray(vao);
-
     {
         var iboData: [6 * MAX_LETTERS]c.GLuint = undefined;
         var i: c.GLuint = 0;
@@ -116,10 +108,10 @@ pub fn init() anyerror!bool
         {
             iboData[i * 6 + 0] = i * 4 + 0;
             iboData[i * 6 + 1] = i * 4 + 1;
-            iboData[i * 6 + 2] = i * 4 + 3;
+            iboData[i * 6 + 2] = i * 4 + 2;
             iboData[i * 6 + 3] = i * 4 + 0;
-            iboData[i * 6 + 4] = i * 4 + 3;
-            iboData[i * 6 + 5] = i * 4 + 2;
+            iboData[i * 6 + 4] = i * 4 + 2;
+            iboData[i * 6 + 5] = i * 4 + 3;
         }
 
         ibo = ogl.ShaderBuffer.createBuffer(c.GL_ELEMENT_ARRAY_BUFFER, iboData.len * @sizeOf(c.GLuint), &iboData, c.GL_STATIC_DRAW);
@@ -129,7 +121,6 @@ pub fn init() anyerror!bool
             return false;
         }
     }
-    c.glBindVertexArray(0);
 
     return true;
 }
@@ -168,7 +159,6 @@ pub fn draw() void
     letterBuffer.writeData(writternLetters * @sizeOf(LetterData), 0, &letterDatas);
 
     program.useShader();
-    c.glBindVertexArray(vao);
     ibo.bind(0);
     letterBuffer.bind(1);
 
@@ -177,11 +167,6 @@ pub fn draw() void
     c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
     c.glDisable(c.GL_DEPTH_TEST);
 
-
-    c.glDrawArrays(
-        c.GL_TRIANGLES, // mode
-        0, // starting index in the enabled arrays
-        6 * @intCast(i32, writternLetters)// number of indices to be rendered
-    );
+    c.glDrawElements( c.GL_TRIANGLES, @intCast(c_int, writternLetters * 6), c.GL_UNSIGNED_INT, null );
     writternLetters = 0;
 }

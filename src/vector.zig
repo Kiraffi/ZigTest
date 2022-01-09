@@ -62,7 +62,7 @@ pub fn normalize(v1: anytype) @TypeOf(v1)
             var result = Quat{};
             result.w = std.math.clamp(v1.w, -1.0, 1.0);
             if(result.w != 1.0 and result.w != -1.0)
-                result.v = normalize(Vec3, v1.v) * std.math.sqrt(1.0 - result.w * result.w);
+                result.v = mul(normalize(v1.v), std.math.sqrt(1.0 - result.w * result.w));
             return result;
         },
         else => {}
