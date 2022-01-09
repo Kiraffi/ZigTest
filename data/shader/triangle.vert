@@ -1,7 +1,5 @@
 #version 450 core
 
-layout (location = 0) out vec4 vColor;
-
 struct Data
 {
     vec4 positions;
@@ -21,6 +19,7 @@ layout (std430, binding = 1) restrict readonly buffer shader_data
     Data values[];
 } vData;
 
+layout (location = 0) out vec4 vColor;
 
 void main()
 {
@@ -33,4 +32,4 @@ void main()
     uint col = vData.values[vertId].color;
     vColor = vec4( uvec4(col, col >> 8, col >> 16, col >> 24) & 255u) / 255.0f;
     gl_Position = vec4((pos.xy / vFrame.screenSizes)  * 2.0f - 1.0f, 0.0f, 1.0f);
-};
+}

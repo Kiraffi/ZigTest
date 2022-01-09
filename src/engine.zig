@@ -162,7 +162,8 @@ pub const Engine = struct
         c.glDebugMessageControl(c.GL_DONT_CARE, c.GL_DONT_CARE, c.GL_DONT_CARE, 0, null, 1);
 
         // Make top left corner 0,0, requires ogl4.5
-        c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
+        //c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
+        c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
 
         var engine = Engine{.width = width, .height = height,
             .timer = try std.time.Timer.start(), .dt = 0.0, .lastDtNanos = 0, .totalNanos = 0,

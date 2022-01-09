@@ -28,5 +28,5 @@ void main()
     vColor = col;
     gl_Position = vec4(pos, 1.0f, 1.0f);
     vTexCoord = (pos * 0.5f) + 0.5f;
-    vTexCoord.y = vTexCoord.y;
+    vTexCoord.y = 1.0f - vTexCoord.y;
 }

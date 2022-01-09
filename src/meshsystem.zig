@@ -91,7 +91,7 @@ pub fn init() bool
         return false;
     }
 
-    meshBuffer = ogl.ShaderBuffer.createBuffer(c.GL_SHADER_STORAGE_BUFFER, vertexBufferOffset, &meshesVertices, c.GL_STATIC_DRAW);
+    meshBuffer = ogl.ShaderBuffer.createBuffer(c.GL_SHADER_STORAGE_BUFFER, vertexBufferOffset, &meshesVertices, c.GL_DYNAMIC_COPY);
     if(!meshBuffer.isValid())
     {
         panic("Failed to create meshBuffer\n", .{});

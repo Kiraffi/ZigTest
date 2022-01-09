@@ -20,9 +20,6 @@ const computeSource = @embedFile("../data/shader/compute.comp");
 
 var program = ogl.Shader{};
 
-const renderWidth: i32 = 1024;
-const renderHeight: i32 = 768;
-
 pub fn init() bool
 {
     program = ogl.Shader.createComputeProgram(computeSource);
@@ -43,7 +40,9 @@ pub fn draw(texture: ogl.Texture) void
 {
     program.useShader();
     c.glBindImageTexture(0, texture.handle, 0, c.GL_FALSE, 0, c.GL_WRITE_ONLY, c.GL_RGBA8);
-    c.glDispatchCompute(renderWidth / 8, renderHeight / 8, 1);
+    const width: c_uint = @intCast(c_uint, texture.width + 7);
+    const height: c_uint = @intCast(c_uint, texture.height + 7);
+    c.glDispatchCompute(width / 8, height / 8, 1);
     c.glMemoryBarrier(c.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 

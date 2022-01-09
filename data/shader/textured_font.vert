@@ -37,7 +37,6 @@ void main()
     {
         pp.x = -0.5f;
     }
-    pp.y = 1.0f - pp.y;
 
     vTexCoord = pp + 0.5f;
     vTexCoord.y = 1.0f - vTexCoord.y;
@@ -48,7 +47,7 @@ void main()
     pp.xy *= vData.values[vertId].size;
     pp.xy += vData.values[vertId].pos;
 
-    pp.xy = (pp.xy) / (screenSizes.xy * 0.5f) - 1.0f;
+    pp.xy = pp.xy / (screenSizes.xy * 0.5f) - 1.0f;
     gl_Position = vec4(vec3(pp.xy, 1.0f) , 1.0);
     uint col = vData.values[vertId].col;
 

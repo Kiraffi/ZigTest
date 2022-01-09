@@ -16,8 +16,8 @@ const panic = std.debug.panic;
 
 const MAX_LETTERS: usize = 256;
 
-const vertexShaderSource = @embedFile("../data/shader/textured_triangle.vert");
-const fragmentShaderSource = @embedFile("../data/shader/textured_triangle.frag");
+const vertexShaderSource = @embedFile("../data/shader/textured_font.vert");
+const fragmentShaderSource = @embedFile("../data/shader/textured_font.frag");
 
 const fontSrc = @embedFile("../data/font/new_font.dat");
 

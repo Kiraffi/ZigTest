@@ -1,16 +1,28 @@
 #version 430
 
+
+layout (std140, binding=0) uniform frame_data
+{
+    vec2 screenSizes;
+    vec2 padding;
+};
+
+
 layout(local_size_x = 8, local_size_y = 8 , local_size_z = 1) in;
 layout(rgba8, binding = 0) uniform image2D outputImage;
 
 
 void main()
 {
-
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
-    vec4 color = imageLoad(outputImage, pixelCoords);
 
-    if(pixelCoords.x > 100 && pixelCoords.x < 200 && pixelCoords.y > 100 && pixelCoords.y < 200)
-        color.rgb = vec3(0.5f, 0.5f, 0.5f);
-    imageStore(outputImage, pixelCoords, color);
+    ivec2 screen = ivec2(screenSizes);
+    if(pixelCoords.x <= screen.x && pixelCoords.y <= screen.y)
+    {
+        vec4 color = imageLoad(outputImage, pixelCoords);
+
+        if(pixelCoords.x > 100 && pixelCoords.x < 200 && pixelCoords.y > 100 && pixelCoords.y < 200)
+            color.rgb *= vec3(0.5f, 0.5f, 0.5f);
+        imageStore(outputImage, pixelCoords, color);
+    }
 }

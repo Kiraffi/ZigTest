@@ -6,6 +6,7 @@ const Math = @import("vector.zig");
 const engine = @import("engine.zig");
 const utils = @import("utils.zig");
 const FontSystem = @import("fontsystem.zig");
+const FlipY = @import("flipy.zig");
 
 const c = @cImport({
     @cInclude("SDL.h");
@@ -382,6 +383,28 @@ pub fn main() anyerror!void
     defer FontSystem.deinit();
     if(!fontInit)
         return;
+    const flipYInit = try FlipY.init();
+    defer FlipY.deinit();
+    if(!flipYInit)
+        return;
+
+    var renderPass = ogl.RenderPass{};
+    var renderTargetTexture = ogl.Texture{};
+    {
+        renderTargetTexture = ogl.Texture.new(eng.width, eng.height, c.GL_TEXTURE_2D, c.GL_RGBA8);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_MIN_FILTER, c.GL_NEAREST);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
+        const rTargets = [_]ogl.Texture{renderTargetTexture};
+        const dTargets = [_]ogl.RenderTarget{};
+
+        renderPass = ogl.RenderPass.createRenderPass(&rTargets, &dTargets);
+    }
+
+    defer renderTargetTexture.deleteTexture();
+    defer renderPass.deleteRenderPass();
+
 
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
     const ran = @intCast(u64, std.time.nanoTimestamp() & 0xffff_ffff_ffff_ffff);
@@ -550,6 +573,15 @@ pub fn main() anyerror!void
             }
         }
 
+        if(renderTargetTexture.width != eng.width or renderTargetTexture.height != eng.height)
+        {
+            renderTargetTexture.resize(eng.width, eng.height);
+            const rTargets = [_]ogl.Texture{renderTargetTexture};
+            const dTargets = [_]ogl.RenderTarget{};
+            renderPass.resize(&rTargets, &dTargets);
+        }
+
+        renderPass.bind();
         c.glClear( c.GL_COLOR_BUFFER_BIT );
         c.glViewport(0, 0, eng.width, eng.height);
 
@@ -570,12 +602,14 @@ pub fn main() anyerror!void
         c.glDrawElements( c.GL_TRIANGLES, 6 * (GameState.VisibleBoardSize + 4), c.GL_UNSIGNED_INT, null );
 
         FontSystem.draw();
-        //Unbind program
-        c.glUseProgram( 0 );
 
+        FlipY.draw(renderTargetTexture);
+        c.glUseProgram( 0 );
+        
         eng.swapBuffers();
         try eng.endFrame();
 
     }
+
 }
 

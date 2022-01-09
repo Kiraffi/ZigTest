@@ -9,6 +9,8 @@ const utils = @import("utils.zig");
 
 const FontSystem = @import("fontsystem.zig");
 const MeshSystem = @import("meshsystem.zig");
+const FlipY = @import("flipy.zig");
+
 const rendertotexture = @import("rendertotexture.zig");
 const compute = @import("compute.zig");
 
@@ -37,7 +39,7 @@ const FrameData = extern struct
 
 pub fn main() anyerror!void
 {
-    var eng = try engine.Engine.init(640, 480, "Test sdl ogl");
+    var eng = try engine.Engine.init(640, 480, "Test sdl ogl1");
     defer eng.deinit();
 
     var frameDataBuffer = ogl.ShaderBuffer{};
@@ -90,6 +92,36 @@ pub fn main() anyerror!void
     defer compute.deinit();
     if(!computeInit)
         return;
+
+    const flipYInit = try FlipY.init();
+    defer FlipY.deinit();
+    if(!flipYInit)
+        return;
+
+    var renderPass = ogl.RenderPass{};
+    var renderTargetTexture = ogl.Texture{};
+    var depthTarget = ogl.RenderTarget{};
+    {
+        const width = eng.width;
+        const height = eng.height;
+        renderTargetTexture = ogl.Texture.new(width, height, c.GL_TEXTURE_2D, c.GL_RGBA8);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_MIN_FILTER, c.GL_NEAREST);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
+        c.glTextureParameteri(renderTargetTexture.handle, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
+
+        depthTarget = ogl.RenderTarget.new(width, height, c.GL_TEXTURE_2D, c.GL_DEPTH_COMPONENT);
+        const rTargets = [_]ogl.Texture{renderTargetTexture};
+        const dTargets = [_]ogl.RenderTarget{depthTarget};
+
+        renderPass = ogl.RenderPass.createRenderPass(&rTargets, &dTargets);
+    }
+
+    defer renderTargetTexture.deleteTexture();
+    defer depthTarget.deleteRenderTarget();
+    defer renderPass.deleteRenderPass();
+
+
 
     var camera = transform.Transform{};
     camera.pos[2] = 10.0;
@@ -198,9 +230,21 @@ pub fn main() anyerror!void
             FontSystem.drawString(buf4, Math.Vec2{400.0, 46.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
         }
 
+        if(renderTargetTexture.width != eng.width or renderTargetTexture.height != eng.height)
+        {
+            renderTargetTexture.resize(eng.width, eng.height);
+            depthTarget.resize(eng.width, eng.height);
+
+            const rTargets = [_]ogl.Texture{renderTargetTexture};
+            const dTargets = [_]ogl.RenderTarget{depthTarget};
+            renderPass.resize(&rTargets, &dTargets);
+        }
+
         rendertotexture.draw();
 
-        compute.draw(rendertotexture.renderTarget);
+
+        renderPass.bind();
+
         c.glClear( c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT );
         c.glViewport(0, 0, eng.width, eng.height);
 
@@ -213,11 +257,15 @@ pub fn main() anyerror!void
         MeshSystem.draw();
 
         FontSystem.draw();
+
+        compute.draw(renderTargetTexture);
+        FlipY.draw(renderTargetTexture);
+
         //Unbind program
         c.glUseProgram( 0 );
-
         eng.swapBuffers();
         try eng.endFrame();
     }
+
 }
 
