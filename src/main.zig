@@ -8,7 +8,7 @@ const engine = @import("engine.zig");
 const utils = @import("utils.zig");
 
 const FontSystem = @import("fontsystem.zig");
-const MeshSystem = @import("meshsystem.zig");
+const MeshSystem = @import("meshsystem2.zig");
 const FlipY = @import("flipy.zig");
 
 const rendertotexture = @import("rendertotexture.zig");
@@ -139,6 +139,8 @@ pub fn main() anyerror!void
 
     c.glBindVertexArray(vao);
 
+    var showCompute = false;
+
     while (eng.running)
     {
         try eng.update();
@@ -200,6 +202,10 @@ pub fn main() anyerror!void
         {
             camera.pos += Math.mul(camUp, moveSpeed);
         }
+        if(eng.wasPressed(c.SDLK_c))
+        {
+            showCompute = !showCompute;
+        }
         const camMat = camera.getTransformAsCameraMatrix();
         b.camMat = camMat;
 
@@ -233,6 +239,16 @@ pub fn main() anyerror!void
             FontSystem.drawString(buf3, Math.Vec2{400.0, 34.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
             const buf4 = try std.fmt.bufPrint(&printBuffer, "CamF: {d:5.2}, {d:5.2}, {d:5.2}", .{ camForward[0],  camForward[1], camForward[2] });
             FontSystem.drawString(buf4, Math.Vec2{400.0, 46.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
+            if(showCompute)
+            {
+                const buf5 =  try std.fmt.bufPrint(&printBuffer, "Compute", .{});
+                FontSystem.drawString(buf5, Math.Vec2{400.0, 68.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
+            }
+            else
+            {
+                const buf5 =  try std.fmt.bufPrint(&printBuffer, "Graphics", .{});
+                FontSystem.drawString(buf5, Math.Vec2{400.0, 68.0}, Math.Vec2{ 8.0, 12.0}, utils.getColor256(255, 255, 255, 255));
+            }
         }
 
         if(renderTargetTexture.width != eng.width or renderTargetTexture.height != eng.height)
@@ -258,8 +274,10 @@ pub fn main() anyerror!void
         cameraDataBuffer.bind(1);
         rendertotexture.renderTextureToBack();
 
-
-        MeshSystem.draw();
+        if(showCompute)
+            MeshSystem.draw2(renderTargetTexture)
+        else
+            MeshSystem.draw(renderTargetTexture);
 
         FontSystem.draw();
 

@@ -77,6 +77,6 @@ pub fn draw(flipYTexture: ogl.Texture) void
     ibo.bind(0);
     c.glDrawElements( c.GL_TRIANGLES, 6, c.GL_UNSIGNED_SHORT, null );
 
-    c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
+    //c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
 }
 
