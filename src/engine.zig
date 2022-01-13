@@ -99,7 +99,7 @@ pub const Engine = struct
         self.lastDtNanos = self.timer.lap();
         self.totalNanos += self.lastDtNanos;
         self.dt = @intToFloat(f32, self.lastDtNanos) / 1_000_000_000.0;
-        if(self.frameIndex % 20 == 0)
+        if(self.frameIndex % 10 == 0)
         {
             const fps = if(self.dt > 0.0) 1.0 / self.dt else 1000.0;
             var printBuffer = std.mem.zeroes([128]u8);
@@ -125,9 +125,9 @@ pub const Engine = struct
             panic("Failed to initialize SDL\n", .{});
         }
 
-        //Use OpenGL 4.5 core
+        //Use OpenGL 4.6 core
         _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
-        _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_MINOR_VERSION, 5 );
+        _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_MINOR_VERSION, 6 );
         _ = c.SDL_GL_SetAttribute( c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE );
 
         _ = c.SDL_GL_SetAttribute( c.SDL_GL_DOUBLEBUFFER, 1 );
@@ -161,7 +161,9 @@ pub const Engine = struct
         print("Vendor:   {s}\n", .{c.glGetString(c.GL_VENDOR)});
         print("Renderer: {s}\n", .{c.glGetString(c.GL_RENDERER)});
         print("Version:  {s}\n", .{c.glGetString(c.GL_VERSION)});
-
+        var subGroups: c.GLint = 0;
+        c.glGetIntegerv(c.GL_SUBGROUP_SIZE_KHR, &subGroups);
+        print("Subgroupsize: {}\n", .{subGroups});
         if(useDebug)
         {
             c.glEnable(c.GL_DEBUG_OUTPUT);
@@ -169,6 +171,8 @@ pub const Engine = struct
             c.glDebugMessageCallback(ogl.openglCallbackFunction, null);
             c.glDebugMessageControl(c.GL_DONT_CARE, c.GL_DONT_CARE, c.GL_DONT_CARE, 0, null, 1);
         }
+
+
         // Make top left corner 0,0, requires ogl4.5
         //c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
         //c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
