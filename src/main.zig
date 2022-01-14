@@ -289,6 +289,6 @@ pub fn main() anyerror!void
         eng.swapBuffers();
         try eng.endFrame();
     }
-    
+
 }
 

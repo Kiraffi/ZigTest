@@ -53,7 +53,7 @@ pub fn init() bool
     }
 
     var rand = Pcg.init(0);
-    
+
     var i: usize = 0;
     while(i < MAX_VERTICES) : (i += 1)
     {
@@ -108,8 +108,8 @@ pub fn draw(texture: ogl.Texture) void
     meshBuffer.bind(2);
     c.glEnable(c.GL_CULL_FACE);
     c.glCullFace(c.GL_BACK);
-    //c.glFrontFace(c.GL_CW); 
-    c.glFrontFace(c.GL_CCW); 
+    //c.glFrontFace(c.GL_CW);
+    c.glFrontFace(c.GL_CCW);
     c.glDisable(c.GL_BLEND);
     c.glEnable(c.GL_DEPTH_TEST);
     c.glDepthFunc(c.GL_LESS);
@@ -117,7 +117,7 @@ pub fn draw(texture: ogl.Texture) void
     //c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, 15 * 3));
 
     c.glDisable(c.GL_CULL_FACE);
-//    
+//
 
 //    computeProgram.useShader();
 //    meshBuffer.bind(2);
@@ -128,15 +128,17 @@ pub fn draw(texture: ogl.Texture) void
 //    c.glMemoryBarrier(c.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 
+const COMPUTE_X_GROUP_SIZE: u32 = 16 * 4;
+const COMPUTE_Y_GROUP_SIZE: u32 = 16 * 4;
 
 pub fn draw2(texture: ogl.Texture) void
 {
     computeProgram.useShader();
     meshBuffer.bind(2);
     c.glBindImageTexture(0, texture.handle, 0, c.GL_FALSE, 0, c.GL_WRITE_ONLY, c.GL_RGBA8);
-    const width: c_uint = @intCast(c_uint, texture.width + 7);
-    const height: c_uint = @intCast(c_uint, texture.height + 3);
-    c.glDispatchCompute(width / 8, height / 4, 1);
+    const width: c_uint = @intCast(c_uint, texture.width + COMPUTE_X_GROUP_SIZE - 1);
+    const height: c_uint = @intCast(c_uint, texture.height + COMPUTE_Y_GROUP_SIZE - 1);
+    c.glDispatchCompute(width / COMPUTE_X_GROUP_SIZE, height / COMPUTE_Y_GROUP_SIZE, 1);
     c.glMemoryBarrier(c.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 

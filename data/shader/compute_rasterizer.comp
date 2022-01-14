@@ -1,6 +1,7 @@
 #version 450
 
-#extension GL_KHR_shader_subgroup_arithmetic: require
+//#extension GL_KHR_shader_subgroup_arithmetic: enable
+
 
 layout (binding = 0) uniform frame_data
 {
@@ -30,14 +31,16 @@ layout (std430, binding=2) restrict readonly buffer vertex_data
     VData vertexValues[];
 };
 
-
-const uint x_threads = 8;
-const uint y_threads = 4;
+const uint pixelsPerThreadX = 4;
+const uint pixelsPerThreadY = 4;
+const uint pixelsPerThread = pixelsPerThreadX * pixelsPerThreadY;
+const uint x_threads = 16;
+const uint y_threads = 16;
 const uint threads = x_threads * y_threads;
 
 shared uint visibleTriangles;
 shared VData triangles[threads * 3];
-
+shared uint maxDepthShared;
 layout(local_size_x = x_threads, local_size_y = y_threads , local_size_z = 1) in;
 layout(rgba8, binding = 0) uniform image2D outputImage;
 
@@ -45,35 +48,54 @@ layout(rgba8, binding = 0) uniform image2D outputImage;
 
 void main()
 {
-    vec2 pixelCoords = vec2(gl_GlobalInvocationID.xy);
+    vec2 pixelCoords = vec2(gl_GlobalInvocationID.xy) * vec2(pixelsPerThreadX, pixelsPerThreadY);
     vec2 screen = vec2(windowSize);
 
-    vec2 currPos = ((pixelCoords + vec2(0.5f)) / screen) * 2.0f - 1.0f;
-
-    vec2 topLeft = (vec2(gl_WorkGroupID.xy) * vec2(x_threads, y_threads)) + vec2(0.5f);
-    vec2 bottomRight = topLeft + vec2(x_threads, y_threads);
+    vec2 topLeft = (vec2(gl_WorkGroupID.xy) * vec2(x_threads, y_threads) * vec2(pixelsPerThreadX, pixelsPerThreadY)) + vec2(0.5f);
+    vec2 bottomRight = topLeft + vec2(x_threads, y_threads) * vec2(pixelsPerThreadX, pixelsPerThreadY);
     topLeft = (topLeft / screen) * 2.0f - 1.0f;
     bottomRight = (bottomRight / screen) * 2.0f - 1.0f;
 
-    float localMin = 2.0f;
+    //float localMin = 2.0f;
+    float localMins[pixelsPerThread];
     vec4 color = vec4(1.0f);
 
-    uint closestTriangleIndex = 0u;
-    uint triangleIndex = 0;
-    vec3 closestWVU = vec3(0.0f);
+    //uint closestTriangleIndex = 0u;
+    uint closestTriangleIndexes[pixelsPerThread]; // = uvec4(0u);
+    vec3 closestWVUs[pixelsPerThread]; // = vec3(0.0f);
 
-    vec3 rayPos = vec3(currPos, 0.0f);
+    for(uint i = 0; i < pixelsPerThread; ++i)
+    {
+        closestWVUs[i] = vec3(0.0f, 0.0f, 0.0f);
+        closestTriangleIndexes[i] = 0;
+        localMins[i] = 2.0f;
+    }
+
     vec3 rDir = vec3(0.0f, 0.0f, -1.0f);
     uint threadId = gl_LocalInvocationID.x + gl_LocalInvocationID.y * x_threads;
 
     vec3 tvecXOffset = vec3(vec2(2.0f, 0.0f) / screen, 0.0f);
     vec3 tvecYOffset = vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
-    vec3 dotXY = vec3(1.0f, float(threadId % x_threads), float(threadId / x_threads));
+
 
     uint maxTriangle = 1048576 / 64; // 15 * 64;
-    while(triangleIndex < maxTriangle)
+    for(uint triangleIndex = 0; triangleIndex < maxTriangle; triangleIndex += threads)
     {
-        float maxDepth = subgroupMax(localMin);
+        float localMin = localMins[0];
+        for(uint i = 1; i < pixelsPerThread; ++i)
+            localMin = min(localMin, localMins[i]);
+
+        if(threadId == 0)
+        {
+            maxDepthShared = floatBitsToUint(localMin);
+            visibleTriangles = 0;
+        }
+        barrier();
+        atomicMax(maxDepthShared, floatBitsToUint(localMin));
+        barrier();
+
+        float maxDepth = uintBitsToFloat(maxDepthShared);
+        //float maxDepth = subgroupMax(localMin);
 
         uint currTriangleIndex = (triangleIndex + threadId) * 3 + 0;
         VData localTriangle1 = vertexValues[currTriangleIndex + 0];
@@ -81,26 +103,32 @@ void main()
         VData localTriangle3 = vertexValues[currTriangleIndex + 2];
 
         vec3 minPos = min(min(localTriangle1.pos, localTriangle2.pos), localTriangle3.pos);
-        vec3 maxPos = max(max(localTriangle1.pos, localTriangle2.pos), localTriangle3.pos);
+        //vec3 maxPos = max(max(localTriangle1.pos, localTriangle2.pos), localTriangle3.pos);
         vec3 v1 = localTriangle1.pos;
         vec3 v2 = localTriangle2.pos;
         vec3 v3 = localTriangle3.pos;
-        
+
         // flip e1 and e2 for CW
         vec3 e1 = v2 - v1;
         vec3 e2 = v3 - v1;
 
         vec3 pvec = cross(rDir, e2);
         float det = dot(e1, pvec);
-        bool addTriangles = !( all(lessThan(maxPos.xy, topLeft)) || all(greaterThan(minPos.xy, bottomRight)) || det <= 0.0f || minPos.z >= maxDepth );
 
+        bool visible =        topLeft.x <= v1.x || topLeft.x <= v2.x || topLeft.x <= v3.x;
+        visible = visible && (topLeft.y <= v1.y || topLeft.y <= v2.y || topLeft.y <= v3.y );
+        visible = visible && (bottomRight.x >= v1.x || bottomRight.x >= v2.x || bottomRight.x >= v3.x );
+        visible = visible && (bottomRight.y >= v1.y || bottomRight.y >= v2.y || bottomRight.y >= v3.y );
 
-        uint localIndex = subgroupInclusiveAdd(addTriangles ? 1 : 0);
-        uint addedTriangles = subgroupMax(localIndex);
+        bool addTriangles = visible && det >= 0.0f && minPos.z < maxDepth;
+
+        //uint localIndex = subgroupInclusiveAdd(addTriangles ? 1 : 0);
+        //uint addedTriangles = subgroupMax(localIndex);
+        //localIndex -= 1;
 
         if(addTriangles)
         {
-            localIndex -= 1;
+            uint localIndex = atomicAdd(visibleTriangles, 1);
             localTriangle1.col = currTriangleIndex + 0;
 
             vec3 tvecStart = vec3(topLeft, 0.0f) - v1;
@@ -123,11 +151,11 @@ void main()
             triangles[localIndex * 3 + 1] = localTriangle2;
             triangles[localIndex * 3 + 2] = localTriangle3;
         }
-        
+
         //groupMemoryBarrier();
         memoryBarrierShared();
         barrier();
-
+        uint addedTriangles = visibleTriangles;
         for(uint t = 0; t < addedTriangles; ++t)
         {
             VData localTriangle1 = triangles[t * 3 + 0];
@@ -137,50 +165,76 @@ void main()
             vec3 uChange = localTriangle1.pos;
             vec3 vChange = localTriangle2.pos;
             vec3 dChange = localTriangle3.pos;
-            
-            float u = dot(uChange, dotXY);
-            float v = dot(vChange, dotXY);
-            float d = dot(dChange, dotXY);
 
-            bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
-            if(d < localMin && all(b4))
+            uint x = 0;
+            uint y = 0;
+            for(uint i = 0; i < pixelsPerThread; ++i)
             {
-                closestTriangleIndex = localTriangle1.col;
-                localMin = d;
-                float w = 1.0f - u - v;
-                closestWVU = vec3(w, u, v);
+                vec3 dotXY = vec3(1.0f, float(threadId % x_threads) * pixelsPerThreadX + x,
+                    float(threadId / x_threads) * pixelsPerThreadY + y);
+
+                float u = dot(uChange, dotXY);
+                float v = dot(vChange, dotXY);
+                float d = dot(dChange, dotXY);
+
+                bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
+                if(d < localMins[i] && all(b4))
+                {
+                    closestTriangleIndexes[i] = localTriangle1.col;
+                    localMins[i] = d;
+                    float w = 1.0f - u - v;
+                    closestWVUs[i] = vec3(w, u, v);
+                }
+                x += 1;
+                if(x == pixelsPerThreadX)
+                {
+                    y += 1;
+                    x = 0;
+                }
             }
         }
-
-        triangleIndex += threads;
 
         //groupMemoryBarrier();
         memoryBarrierShared();
         barrier();
     }
+    uint x = 0;
+    uint y = 0;
 
-    if(localMin <= 1.0f)
+    for(uint i = 0; i < pixelsPerThread; ++i)
     {
-        VData closest1 = vertexValues[closestTriangleIndex + 0];
-        VData closest2 = vertexValues[closestTriangleIndex + 1];
-        VData closest3 = vertexValues[closestTriangleIndex + 2];
-        uvec4 c1 = uvec4((closest1.col & 255u), (closest1.col >> 8u) & 255u, (closest1.col >> 16u) & 255u, (closest1.col >> 24u) & 255u);
-        uvec4 c2 = uvec4((closest2.col & 255u), (closest2.col >> 8u) & 255u, (closest2.col >> 16u) & 255u, (closest2.col >> 24u) & 255u);
-        uvec4 c3 = uvec4((closest3.col & 255u), (closest3.col >> 8u) & 255u, (closest3.col >> 16u) & 255u, (closest3.col >> 24u) & 255u);
-        vec4 cc1 = c1 / 255.0f;
-        vec4 cc2 = c2 / 255.0f;
-        vec4 cc3 = c3 / 255.0f;
-        color =  cc1 * closestWVU.x + cc2 * closestWVU.y + cc3 * closestWVU.z;
-
-        // Visualize depth
-        //color.rgb = vec3(localMin * localMin);
-        //color.rgb = vec3(localMin);
-
-        color.a = 1.0f;
-        if(pixelCoords.x <= screen.x && pixelCoords.y <= screen.y)
+        if(localMins[i] <= 1.0f)
         {
-            imageStore(outputImage, ivec2(pixelCoords), color);
+            vec3 closestWVU = closestWVUs[i];
+
+            VData closest1 = vertexValues[closestTriangleIndexes[i] + 0];
+            VData closest2 = vertexValues[closestTriangleIndexes[i] + 1];
+            VData closest3 = vertexValues[closestTriangleIndexes[i] + 2];
+            uvec4 c1 = uvec4((closest1.col & 255u), (closest1.col >> 8u) & 255u, (closest1.col >> 16u) & 255u, (closest1.col >> 24u) & 255u);
+            uvec4 c2 = uvec4((closest2.col & 255u), (closest2.col >> 8u) & 255u, (closest2.col >> 16u) & 255u, (closest2.col >> 24u) & 255u);
+            uvec4 c3 = uvec4((closest3.col & 255u), (closest3.col >> 8u) & 255u, (closest3.col >> 16u) & 255u, (closest3.col >> 24u) & 255u);
+            vec4 cc1 = c1 / 255.0f;
+            vec4 cc2 = c2 / 255.0f;
+            vec4 cc3 = c3 / 255.0f;
+            color =  cc1 * closestWVU.x + cc2 * closestWVU.y + cc3 * closestWVU.z;
+
+            // Visualize depth
+            //color.rgb = vec3(localMin * localMin);
+            //color.rgb = vec3(localMin);
+
+            color.a = 1.0f;
+            if(all(lessThanEqual(pixelCoords + ivec2(x, y), screen)))
+            {
+                imageStore(outputImage, ivec2(pixelCoords) + ivec2(x, y), color);
+            }
         }
+        x += 1;
+        if(x == pixelsPerThreadX)
+        {
+            y += 1;
+            x = 0;
+        }
+
     }
 }
 
