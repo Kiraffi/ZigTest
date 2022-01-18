@@ -107,7 +107,7 @@ pub const Engine = struct
             self.setTitle(res);
         }
 
-        if(!flipHappened or !self.vsync)
+        if(!flipHappened)// or !self.vsync)
         {
             // windows timeBeginPeriod
             c.SDL_Delay(1);

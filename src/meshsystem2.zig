@@ -72,6 +72,7 @@ pub fn init() bool
             if(j < 2)
             {
                 f = f * 2.0 - 1.0;
+                f = f * 0.2;
             }
             v.pos[j] = f;
         }

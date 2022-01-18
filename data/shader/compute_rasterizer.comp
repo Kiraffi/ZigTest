@@ -62,11 +62,9 @@ void main()
 
     //uint closestTriangleIndex = 0u;
     uint closestTriangleIndexes[pixelsPerThread]; // = uvec4(0u);
-    vec3 closestWVUs[pixelsPerThread]; // = vec3(0.0f);
 
     for(uint i = 0; i < pixelsPerThread; ++i)
     {
-        closestWVUs[i] = vec3(0.0f, 0.0f, 0.0f);
         closestTriangleIndexes[i] = 0;
         localMins[i] = 2.0f;
     }
@@ -83,7 +81,7 @@ void main()
     {
         float localMin = localMins[0];
         for(uint i = 1; i < pixelsPerThread; ++i)
-            localMin = min(localMin, localMins[i]);
+            localMin = max(localMin, localMins[i]);
 
         if(threadId == 0)
         {
@@ -182,8 +180,6 @@ void main()
                 {
                     closestTriangleIndexes[i] = localTriangle1.col;
                     localMins[i] = d;
-                    float w = 1.0f - u - v;
-                    closestWVUs[i] = vec3(w, u, v);
                 }
                 x += 1;
                 if(x == pixelsPerThreadX)
@@ -205,7 +201,7 @@ void main()
     {
         if(localMins[i] <= 1.0f)
         {
-            vec3 closestWVU = closestWVUs[i];
+           
 
             VData closest1 = vertexValues[closestTriangleIndexes[i] + 0];
             VData closest2 = vertexValues[closestTriangleIndexes[i] + 1];
@@ -216,6 +212,43 @@ void main()
             vec4 cc1 = c1 / 255.0f;
             vec4 cc2 = c2 / 255.0f;
             vec4 cc3 = c3 / 255.0f;
+
+
+
+
+            vec3 v1 = closest1.pos;
+            vec3 v2 = closest2.pos;
+            vec3 v3 = closest3.pos;
+
+            // flip e1 and e2 for CW
+            vec3 e1 = v2 - v1;
+            vec3 e2 = v3 - v1;
+
+            vec3 pvec = cross(rDir, e2);
+            float det = dot(e1, pvec);
+
+            vec3 tvecStart = vec3(topLeft, 0.0f) - v1;
+
+            vec3 qvecStart   = cross(tvecStart,   e1);
+            vec3 qvecXOffset = cross(tvecXOffset, e1);
+            vec3 qvecYOffset = cross(tvecYOffset, e1);
+
+            float invDet = 1.0f / det;
+
+            vec3 uChange = vec3(dot(tvecStart, pvec), dot(tvecXOffset, pvec), dot(tvecYOffset, pvec)) * invDet;
+            vec3 vChange = vec3(dot(qvecStart, rDir), dot(qvecXOffset, rDir), dot(qvecYOffset, rDir)) * invDet;
+            vec3 dChange = vec3(dot(qvecStart, e2), dot(qvecXOffset, e2), dot(qvecYOffset, e2)) * (-invDet);
+
+            vec3 dotXY = vec3(1.0f, float(threadId % x_threads) * pixelsPerThreadX + x,
+                float(threadId / x_threads) * pixelsPerThreadY + y);
+
+            float u = dot(uChange, dotXY);
+            float v = dot(vChange, dotXY);
+
+            vec3 closestWVU = vec3(1.0f - u - v, u, v);
+
+
+
             color =  cc1 * closestWVU.x + cc2 * closestWVU.y + cc3 * closestWVU.z;
 
             // Visualize depth

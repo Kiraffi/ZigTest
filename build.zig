@@ -68,9 +68,10 @@ pub fn build(b: *std.build.Builder) void
 
 
     //buildTarget(b, "zigmain", "src/main.zig", target, mode, false, false);
-    buildTarget(b, "zigtetris", "src/tetris.zig", target, mode, false, false);
+    //buildTarget(b, "zigtetris", "src/tetris.zig", target, mode, false, false);
 
 
+    //buildTarget(b, "zigtetris", "src/tetris.zig", target, mode, true, false);
     buildTarget(b, "zigmain", "src/main.zig", target, mode, true, false);
 
 
