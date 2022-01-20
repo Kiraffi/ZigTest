@@ -14,7 +14,7 @@ const print = std.debug.print;
 const panic = std.debug.panic;
 
 var flipHappened = false;
-
+var previousTime: u64 = 0;
 pub const Engine = struct
 {
     width: c_int = 640,
@@ -99,12 +99,15 @@ pub const Engine = struct
         self.lastDtNanos = self.timer.lap();
         self.totalNanos += self.lastDtNanos;
         self.dt = @intToFloat(f32, self.lastDtNanos) / 1_000_000_000.0;
-        if(self.frameIndex % 10 == 0)
+        const frameUpdate: u32 = 10;
+        if(self.frameIndex % frameUpdate == 0)
         {
-            const fps = if(self.dt > 0.0) 1.0 / self.dt else 1000.0;
+            const deltaTime = @intToFloat(f64, self.totalNanos - previousTime) / (@intToFloat(f64, frameUpdate) * 1_000_000_000.0);
+            const fps = if(deltaTime > 0.0) 1.0 / deltaTime else 1000.0;
             var printBuffer = std.mem.zeroes([128]u8);
-            const res = try std.fmt.bufPrint(&printBuffer, "Time: {d:3.3}ms, Fps: {d:3.2}", .{self.dt * 1000.0, fps});
+            const res = try std.fmt.bufPrint(&printBuffer, "Time: {d:3.3}ms, Fps: {d:3.2}", .{deltaTime * 1000.0, fps});
             self.setTitle(res);
+            previousTime = self.totalNanos;
         }
 
         if(!flipHappened or !self.vsync)
