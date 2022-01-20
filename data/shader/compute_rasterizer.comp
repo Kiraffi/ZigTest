@@ -102,7 +102,7 @@ void main()
         {
             maxDepths[blockId] = floatBitsToUint(localMin);
         }
-        
+
         groupMemoryBarrier();
         memoryBarrierShared();
         barrier();
@@ -151,14 +151,14 @@ void main()
         vec4 v = vec4(0.0f, vChange.y * tileSize.x, vChange.z * tileSize.y, vChange.y * tileSize.x + vChange.z * tileSize.y) + vChange.x;
         vec4 d = vec4(0.0f, dChange.y * tileSize.x, dChange.z * tileSize.y, dChange.y * tileSize.x + dChange.z * tileSize.y) + dChange.x;
 
-        bool visible = 
-            all(notEqual(uChange.yz, vec2(0.0f))) && 
-            all(notEqual(vChange.yz, vec2(0.0f))) && 
+        bool visible =
+            all(notEqual(uChange.yz, vec2(0.0f))) &&
+            all(notEqual(vChange.yz, vec2(0.0f))) &&
             all(notEqual(dChange.yz, vec2(0.0f))) &&
             !(
                 all(lessThan(u, vec4(0.0f))) || all(greaterThan(u, vec4(1.0f))) ||
                 all(lessThan(v, vec4(0.0f))) || all(greaterThan(u + v, vec4(1.0f))) ||
-                all(lessThan(d, vec4(0.0f))) || all(greaterThan(d, vec4(1.0f))) 
+                all(lessThan(d, vec4(0.0f))) || all(greaterThan(d, vec4(1.0f)))
             );
         bool addTriangles = visible && det >= 0.0f && minZ < maxDepth;
 
@@ -212,7 +212,7 @@ void main()
 
                 prevMinD = newMinD;
             }
-            
+
 
             if(visibility != 0)
             {
@@ -248,7 +248,7 @@ void main()
             #else
                 uint visibility = triangleIndexes[t + 1 * threads];
             #endif
-            if((visibility & (1 << blockId)) != 0)
+            if((visibility & (1u << blockId)) != 0)
             {
                 #if USE_SHARED_VERTICES
                     VData localTriangle1 = triangles[t + 0 * threads];
