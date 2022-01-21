@@ -62,21 +62,42 @@ pub fn init() bool
 
         var j: usize = 0;
         var v = Vertex{};
-        while(j < 3) : (j += 1)
+        //if(false)
         {
-            var f: f32 = 0;
-            var p: u16 = 0;
-            p =  randBytes[j * 2 + 0];
-            p += @intCast(u16, randBytes[j * 2 + 1]) << 8;
-            f = @intToFloat(f32, p) / 65535.0;
-            if(j < 2)
+            while(j < 3) : (j += 1)
             {
-                f = f * 2.0 - 1.0;
-                //f = f * 0.1;
+                var f: f32 = 0;
+                var p: u16 = 0;
+                p =  randBytes[j * 2 + 0];
+                p += @intCast(u16, randBytes[j * 2 + 1]) << 8;
+                f = @intToFloat(f32, p) / 65535.0;
+                if(j < 2)
+                {
+                    f = f * 2.0 - 1.0;
+                    //f = f * 0.1;
+                }
+                v.pos[j] = f;
             }
-            v.pos[j] = f;
         }
-
+        if(true)
+        {
+            j = i / 3;
+            if(i % 3 == 0)
+            {
+                v.pos[0] = (@intToFloat(f32, j % 1024) / 1024.0) * 2.0 - 1.0;
+                v.pos[1] = (@intToFloat(f32, j / 1024) / 1024.0) * 2.0 - 1.0;
+            }
+            else if(i % 3 == 1)
+            {
+                v.pos[0] = (@intToFloat(f32, (j + 100) % 1024) / 1024.0) * 2.0 - 1.0;
+                v.pos[1] = (@intToFloat(f32, j / 1024) / 1024.0) * 2.0 - 1.0;
+            }
+            else
+            {
+                v.pos[0] = (@intToFloat(f32, j % 1024) / 1024.0) * 2.0 - 1.0;
+                v.pos[1] = (@intToFloat(f32, j / 1024 + 100) / 1024.0) * 2.0 - 1.0;
+            }
+        }
         v.col = utils.getColor256(randBytes[12], randBytes[13], randBytes[14], 255);
         //if(i % 3 != 0)
         //    v.col = meshesVertices[i - i%3].col;
@@ -114,7 +135,7 @@ pub fn draw(texture: ogl.Texture) void
     c.glDisable(c.GL_BLEND);
     c.glEnable(c.GL_DEPTH_TEST);
     c.glDepthFunc(c.GL_LESS);
-    c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, MAX_VERTICES / 64));
+    c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, MAX_VERTICES / 1));
     //c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, 15 * 3));
 
     c.glDisable(c.GL_CULL_FACE);
