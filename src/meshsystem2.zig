@@ -21,7 +21,7 @@ const vertexShaderSource = @embedFile("../data/shader/basic3d_odd.vert");
 const fragmentShaderSource = @embedFile("../data/shader/basic3d.frag");
 const computeShaderSource = @embedFile("../data/shader/compute_rasterizer.comp");
 
-const MAX_VERTICES: u32 = 1_048_576 * 3;
+const MAX_VERTICES: u32 = 1_048_576 * 3 / (64);
 var meshesVertices: [MAX_VERTICES]Vertex = undefined;
 var meshesVerticesCount: u32 = 0;
 
@@ -82,15 +82,18 @@ pub fn init() bool
         if(true)
         {
             j = i / 3;
+            const k: usize = j + 1; // breaks if on same x-line 2 points as in j + 0...
+            const ki: usize = j + 5;
             if(i % 3 == 0)
             {
-                v.pos[0] = (@intToFloat(f32, j % 1024) / 1024.0) * 2.0 - 1.0;
+                // this for some reason breaks the compute...?
+                v.pos[0] = (@intToFloat(f32, k % 1024) / 1024.0) * 2.0 - 1.0;
                 v.pos[1] = (@intToFloat(f32, j / 1024) / 1024.0) * 2.0 - 1.0;
             }
             else if(i % 3 == 1)
             {
-                v.pos[0] = (@intToFloat(f32, (j + 100) % 1024) / 1024.0) * 2.0 - 1.0;
-                v.pos[1] = (@intToFloat(f32, j / 1024) / 1024.0) * 2.0 - 1.0;
+                v.pos[0] = (@intToFloat(f32, ki % 1024) / 1024.0) * 2.0 - 1.0;
+                v.pos[1] = (@intToFloat(f32, j / 1024 + 300) / 1024.0) * 2.0 - 1.0;
             }
             else
             {
@@ -102,6 +105,21 @@ pub fn init() bool
         //if(i % 3 != 0)
         //    v.col = meshesVertices[i - i%3].col;
         meshesVertices[i] = v;
+    }
+
+    var kk: u32 = 100;
+
+    meshesVertices[kk * 3 + 0].pos[0] = 0.0;
+    meshesVertices[kk * 3 + 0].pos[1] = 0.0;
+    meshesVertices[kk * 3 + 1].pos[0] = 1.0;
+    meshesVertices[kk * 3 + 2].pos[0] = -1.0;
+    meshesVertices[kk * 3 + 2].pos[1] = 1.0;
+    kk *= 3;
+    kk += 9;
+    while(kk < MAX_VERTICES / 128) : (kk += 1)
+    {
+        meshesVertices[kk].pos[0] = 0.0;
+
     }
 
     meshBuffer = ogl.ShaderBuffer.createBuffer(c.GL_SHADER_STORAGE_BUFFER, MAX_VERTICES * @sizeOf(Vertex), &meshesVertices, c.GL_STATIC_DRAW);//GL_DYNAMIC_COPY);
@@ -135,7 +153,7 @@ pub fn draw(texture: ogl.Texture) void
     c.glDisable(c.GL_BLEND);
     c.glEnable(c.GL_DEPTH_TEST);
     c.glDepthFunc(c.GL_LESS);
-    c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, MAX_VERTICES / 1));
+    c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, MAX_VERTICES / 64));
     //c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, 15 * 3));
 
     c.glDisable(c.GL_CULL_FACE);
