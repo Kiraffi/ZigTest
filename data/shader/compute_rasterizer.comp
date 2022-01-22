@@ -101,7 +101,7 @@ void main()
     vec3 tvecYOffset = vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
 
     uint blockId = threadId / THREAD_GROUP_SIZE;
-    uint maxTriangle = 1048576 / (64 * 64); // 15 * 64;
+    uint maxTriangle = 1048576 / (64); // 15 * 64;
     for(uint triangleIndex = 0; triangleIndex < maxTriangle; triangleIndex += threads)
     {
         float localMin = localMins[0];
@@ -156,11 +156,17 @@ void main()
                 minPos.xy = max(minPos.xy, vec2(0.0f)) * 0.25f * screen;
                 maxPos.xy = min(maxPos.xy, tileSizeScreen) * 0.25f * screen;
                 // flip e1 and e2 for CW
+
+
                 vec3 e1 = v2 - v1;
                 vec3 e2 = v3 - v1;
-                if(e2.x == 0.0f) e2.x = 1.0 / 1048576.0f;
-                if(e2.y == 0.0f) e2.y = 1.0 / 1048576.0f;
-                vec3 pvec = cross(rDir, e2);
+                // breaks if e2.x == 0.0f
+                if(e1.x == 0.0f) e1.x += 1.0e-30f;
+                if(e1.y == 0.0f) e1.y += 1.0e-30f;
+                if(e2.x == 0.0f) e2.x += 1.0e-30f;
+                if(e2.y == 0.0f) e2.y += 1.0e-30f;
+                
+                vec3 pvec = vec3(e2.y, -e2.x, 0.0f); //cross(rDir, e2);
                 float det = dot(e1, pvec);
 
 

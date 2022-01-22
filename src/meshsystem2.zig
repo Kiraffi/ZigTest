@@ -21,7 +21,7 @@ const vertexShaderSource = @embedFile("../data/shader/basic3d_odd.vert");
 const fragmentShaderSource = @embedFile("../data/shader/basic3d.frag");
 const computeShaderSource = @embedFile("../data/shader/compute_rasterizer.comp");
 
-const MAX_VERTICES: u32 = 1_048_576 * 3 / (64);
+const MAX_VERTICES: u32 = 1_048_576 * 3;
 var meshesVertices: [MAX_VERTICES]Vertex = undefined;
 var meshesVerticesCount: u32 = 0;
 
@@ -82,7 +82,7 @@ pub fn init() bool
         if(true)
         {
             j = i / 3;
-            const k: usize = j + 1; // breaks if on same x-line 2 points as in j + 0...
+            const k: usize = j + 0; // breaks if on same x-line 2 points as in j + 0...
             const ki: usize = j + 5;
             if(i % 3 == 0)
             {
@@ -93,7 +93,7 @@ pub fn init() bool
             else if(i % 3 == 1)
             {
                 v.pos[0] = (@intToFloat(f32, ki % 1024) / 1024.0) * 2.0 - 1.0;
-                v.pos[1] = (@intToFloat(f32, j / 1024 + 300) / 1024.0) * 2.0 - 1.0;
+                v.pos[1] = (@intToFloat(f32, j / 1024 + 0) / 1024.0) * 2.0 - 1.0;
             }
             else
             {
