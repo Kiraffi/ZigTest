@@ -112,7 +112,7 @@ pub const Engine = struct
 
         if(!flipHappened or !self.vsync)
         {
-            // windows timeBeginPeriod
+            // windows timeBeginPeriod?
             c.SDL_Delay(1);
         }
         flipHappened = false;
@@ -178,7 +178,7 @@ pub const Engine = struct
 
         // Make top left corner 0,0, requires ogl4.5
         //c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
-        //c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
+        c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
 
         var engine = Engine{.width = width, .height = height,
             .timer = try std.time.Timer.start(), .dt = 0.0, .lastDtNanos = 0, .totalNanos = 0,

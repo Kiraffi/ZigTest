@@ -89,7 +89,12 @@ void main()
     for(uint i = 0; i < pixelsPerThread; ++i)
     {
         closestTriangleIndexes[i] = 0;
-        localMins[i] = 2.0f;
+        uint x = i % pixelsPerThreadX;
+        uint y = i / pixelsPerThreadX;
+        if(all(lessThanEqual(pixelCoords + ivec2(x, y), screen)))
+            localMins[i] = 2.0f;
+        else
+            localMins[i] = 0.0f;
         #if USE_SMALL_TRIANGLE_SEPARATION
             depthBuffer[threadId * pixelsPerThread + i] = floatBitsToUint(2.0f);
         #endif
@@ -163,8 +168,10 @@ void main()
                 // breaks if e2.x == 0.0f
                 if(e1.x == 0.0f) e1.x += 1.0e-30f;
                 if(e1.y == 0.0f) e1.y += 1.0e-30f;
+                if(e1.z == 0.0f) e1.z += 1.0e-30f;
                 if(e2.x == 0.0f) e2.x += 1.0e-30f;
                 if(e2.y == 0.0f) e2.y += 1.0e-30f;
+                if(e2.z == 0.0f) e2.z += 1.0e-30f;
                 
                 vec3 pvec = vec3(e2.y, -e2.x, 0.0f); //cross(rDir, e2);
                 float det = dot(e1, pvec);
