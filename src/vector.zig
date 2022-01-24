@@ -293,6 +293,27 @@ pub fn createPerspectiveMatrixRH(fovRad: f32, aspectRatio: f32, nearPlane: f32, 
     return result;
 }
 
+pub fn createPerspectiveReverseInfiniteMatrixRH(fovRad: f32, aspectRatio: f32, nearPlane: f32) Mat44
+{
+    assert(std.math.fabs(fovRad) > 0.00001);
+    assert(std.math.fabs(aspectRatio) > 0.001);
+    assert(std.math.fabs(nearPlane) > 0.0);
+
+    const yScale: f32 = 1.0 / std.math.tan(fovRad * 0.5);
+    const xScale: f32 = yScale / aspectRatio;
+
+    var result = Mat44Identity;
+    result[0] = xScale;
+    result[5] = -yScale;
+
+    result[10] = 0;
+    result[11] = nearPlane;
+    result[14] = -1.0;
+    result[15] = 0.0;
+    return result;
+}
+
+
 pub fn createMatrixFromLookAt(pos: Vec3, target: Vec3, up: Vec3) Mat44
 {
     const forward = normalize(target - pos);

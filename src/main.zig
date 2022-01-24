@@ -8,7 +8,7 @@ const engine = @import("engine.zig");
 const utils = @import("utils.zig");
 
 const FontSystem = @import("fontsystem.zig");
-const MeshSystem = @import("meshsystem2.zig");
+const MeshSystem = @import("meshsystem.zig");
 const FlipY = @import("flipy.zig");
 
 const rendertotexture = @import("rendertotexture.zig");
@@ -132,10 +132,12 @@ pub fn main() anyerror!void
     var b = CameraFrameBuffer{};
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
 
+    c.glClearDepth(0.0);
+
     var trans = transform.Transform{};
     trans.pos = Math.Vec3{5.0, -2.0, 2.0};
     trans.scale = Math.Vec3{2.0, 2.0, 2.0};
-    trans.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{1, 1, 0}, Math.toRadians(90));
+    //trans.rot = Math.getQuaternionFromAxisAngle(Math.Vec3{1, 1, 0}, Math.toRadians(30));
 
     c.glBindVertexArray(vao);
 
@@ -211,15 +213,18 @@ pub fn main() anyerror!void
 
         const aspect = @intToFloat(f32, eng.width) / @intToFloat(f32, eng.height);
         const fovY: f32 = Math.toRadians(90.0);
-        const zFar: f32 = 2000.0;
+        //const zFar: f32 = 2000.0;
         const zNear: f32 = 0.125;
-        const projMat = Math.createPerspectiveMatrixRH( fovY, aspect, zNear, zFar );
+
+
+        //const projMat = Math.createPerspectiveMatrixRH( fovY, aspect, zNear, zFar );
+        const projMat = Math.createPerspectiveReverseInfiniteMatrixRH( fovY, aspect, zNear );
         b.viewProj = projMat;
         b.mvp = Math.mul(projMat, camMat);
 
 
 
-        trans.rot = Math.normalize(Math.mul(Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed * 1.0), trans.rot));
+        //trans.rot = Math.normalize(Math.mul(Math.getQuaternionFromAxisAngle(Math.Vec3{0, 1, 0}, rotSpeed * 1.0), trans.rot));
         b.padding = trans.getModelMatrix();
 
 
@@ -275,10 +280,13 @@ pub fn main() anyerror!void
         rendertotexture.renderTextureToBack();
 
         if(showCompute)
-            MeshSystem.draw2(renderTargetTexture)
+        {
+            MeshSystem.draw2(renderTargetTexture);
+        }
         else
+        {
             MeshSystem.draw(renderTargetTexture);
-
+        }
         FontSystem.draw();
 
         compute.draw(renderTargetTexture);
