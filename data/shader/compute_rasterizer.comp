@@ -172,7 +172,7 @@ void main()
                 if(e2.x == 0.0f) e2.x += 1.0e-30f;
                 if(e2.y == 0.0f) e2.y += 1.0e-30f;
                 if(e2.z == 0.0f) e2.z += 1.0e-30f;
-                
+
                 vec3 pvec = vec3(e2.y, -e2.x, 0.0f); //cross(rDir, e2);
                 float det = dot(e1, pvec);
 
@@ -226,7 +226,7 @@ void main()
 
                 if(addTriangles)
                 {
-                    
+
                     uint visibility = 0;
                     float prevMinD = min(d.x, d.y);
 
@@ -278,10 +278,10 @@ void main()
                     if(adding)
                     {
                         uint area =
-                            ((uint(minPos.x) & 255) << 0) |
-                            ((uint(minPos.y) & 255) << 8) |
-                            ((uint(maxPos.x) & 255) << 16) |
-                            ((uint(maxPos.y) & 255) << 24);
+                            ((uint(minPos.x) & 255u) << 0u) |
+                            ((uint(minPos.y) & 255u) << 8u) |
+                            ((uint(maxPos.x) & 255u) << 16u) |
+                            ((uint(maxPos.y) & 255u) << 24u);
 
                         uint localIndex = atomicAdd(visibleTriangles, 1);
                         #if USE_SMALL_TRIANGLE_SEPARATION && 0
@@ -315,10 +315,10 @@ void main()
                     else if(isSmallTriangle)
                     {
                         uint area =
-                            ((uint(minPos.x) & 255) << 0) |
-                            ((uint(minPos.y) & 255) << 8) |
-                            ((uint(maxPos.x) & 255) << 16) |
-                            ((uint(maxPos.y) & 255) << 24);
+                            ((uint(minPos.x) & 255u) << 0u) |
+                            ((uint(minPos.y) & 255u) << 8u) |
+                            ((uint(maxPos.x) & 255u) << 16u) |
+                            ((uint(maxPos.y) & 255u) << 24u);
 
                         uint startX = (area >> 0u) & 255u;
                         uint startY = (area >> 8u) & 255u;
@@ -375,10 +375,10 @@ void main()
             vec3 uChange = localTriangle1.pos;
             vec3 vChange = localTriangle2.pos;
             vec3 dChange = localTriangle3.pos;
-            
+
             uint currTriangleIndex = localTriangle1.col;
             uint area = localTriangle3.col;
-            
+
             uint startX = (area >> 0u) & 255u;
             uint startY = (area >> 8u) & 255u;
 
