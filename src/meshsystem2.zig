@@ -140,7 +140,7 @@ pub fn draw(texture: ogl.Texture) void
     c.glDisable(c.GL_BLEND);
     c.glEnable(c.GL_DEPTH_TEST);
     c.glDepthFunc(c.GL_GREATER);
-    c.glDrawArrays( c.GL_TRIANGLES, 0, 24 * 3);// @intCast(c_int, MAX_VERTICES / 64));
+    c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, MAX_VERTICES / 64));
     //c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, 15 * 3));
 
     c.glDisable(c.GL_CULL_FACE);

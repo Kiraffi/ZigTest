@@ -116,7 +116,8 @@ void main()
     vec3 tvecYOffset = vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
 
     uint blockId = threadId / THREAD_GROUP_SIZE;
-    uint maxTriangle = 24; // 1048576 / (64); // 15 * 64;
+    //uint maxTriangle = 24; // 1048576 / (64); // 15 * 64;
+    uint maxTriangle = 1048576 / (64); // 15 * 64;
     for(uint triangleIndex = 0; triangleIndex < maxTriangle; triangleIndex += threads)
     {
         float localMin = localMins[0];
@@ -193,7 +194,8 @@ void main()
 
             //if(!(any(greaterThan(minPos, vec3(topLeft + tileSize, maxDepth))) || any(lessThan(maxPos, vec3(topLeft, 0.0f)))))
             //if(!(any(equal(minPos, maxPos)) || any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))))
-            if(!( any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))) && minZ < 1.0f && maxZ > 0.0f)
+            if(!( any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))) &&
+                minZ <= 1.0f && maxZ > maxDepth)
             {
                 minPos.xy = max(minPos.xy, vec2(0.0f)) * 0.25f * screen;
                 maxPos.xy = min(maxPos.xy, tileSizeScreen) * 0.25f * screen;
@@ -240,7 +242,7 @@ void main()
                         all(lessThan(d, vec4(0.0f))) || all(greaterThan(d, vec4(1.0)))
                     );
 
-                bool addTriangles = visible && det > 0.0f && maxZ > maxDepth;
+                bool addTriangles = visible && det > 0.0f;
 
                 //uint localIndex = subgroupInclusiveAdd(addTriangles ? 1 : 0);
                 //uint addedTriangles = subgroupMax(localIndex);
@@ -266,7 +268,7 @@ void main()
                 {
 
                     uint visibility = 0;
-                    float prevMinD = min(d.x, d.y);
+                    float prevMinD = max(d.x, d.y);
 
                     u.zw = u.xy;
                     v.zw = v.xy;
@@ -286,7 +288,7 @@ void main()
                         v.zw += vec2(vChange.z * yChange);
                         d.zw += vec2(dChange.z * yChange);
 
-                        float localMinDepth = min(1.0f, uintBitsToFloat(maxDepths[i]));
+                        float localMinDepth = uintBitsToFloat(maxDepths[i]);
 
                         uint newBits = uint(all(lessThan(u.zw, vec2(0.0f))) )       * 1u;
                         newBits |= uint(all(lessThan(v.zw, vec2(0.0f))) )           * 2u;
@@ -302,7 +304,7 @@ void main()
                         float newMinD = max(d.z, d.w);
                         float minMinD = max(newMinD, prevMinD);
                         // Faster if not testing the uv hitting...
-                        bool addVisibilityBit = minMinD > localMinDepth && newVisible;
+                        bool addVisibilityBit = newVisible && minMinD >= localMinDepth;
                         visibility |= addVisibilityBit ? visibilityBit : 0;
 
                         oldBits = newBits;
