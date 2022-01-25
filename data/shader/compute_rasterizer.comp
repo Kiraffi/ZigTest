@@ -46,7 +46,7 @@ layout (std430, binding = 4, row_major) restrict readonly buffer instance_data
     mat4 instanceMatrix[];
 };
 
-const uint pixelsPerThreadX = 8;
+const uint pixelsPerThreadX = 16;
 const uint pixelsPerThreadY = 1;
 const uint pixelsPerThread = pixelsPerThreadX * pixelsPerThreadY;
 const uint x_threads = 4 * 1;
@@ -197,7 +197,7 @@ void main()
                 if(e2.y == 0.0f) e2.y += 1.0e-30f;
                 if(e2.z == 0.0f) e2.z += 1.0e-30f;
 
-                vec3 pvec = vec3(e2.y, -e2.x, 0.0f); //cross(rDir, e2);
+                vec2 pvec = vec2(e2.y, -e2.x); //cross(rDir, e2);
                 float det = dot(e1.xy, pvec.xy);
 
 
@@ -209,7 +209,7 @@ void main()
 
                 float invDet = 1.0f / det;
 
-                vec3 uChange = vec3(dot(tvecStart, pvec), dot(tvecXOffset, pvec), dot(tvecYOffset, pvec)) * invDet;
+                vec3 uChange = vec3(dot(tvecStart.xy, pvec), dot(tvecXOffset.xy, pvec), dot(tvecYOffset.xy, pvec)) * invDet;
                 vec3 vChange = vec3(dot(qvecStart, rDir), dot(qvecXOffset, rDir), dot(qvecYOffset, rDir)) * invDet;
                 vec3 dChange = vec3(dot(qvecStart, e2), dot(qvecXOffset, e2), dot(qvecYOffset, e2)) * (-invDet);
 
@@ -237,6 +237,7 @@ void main()
                 {
 
                     uint visibility = 0;
+                    #if 1
                     float prevMinD = max(d.x, d.y);
 
                     u.zw = u.xy;
@@ -280,6 +281,7 @@ void main()
 
                         prevMinD = newMinD;
                     }
+                    #endif
                     bool adding = visibility != 0;
                     if(adding)
                     {
@@ -378,19 +380,27 @@ void main()
                     float u = dot(uChange, vec3(1.0f, xOff, yOff));
                     float v = dot(vChange, vec3(1.0f, xOff, yOff));
                     float d = dot(dChange, vec3(1.0f, xOff, yOff));
+                    float ds = d;
+                    uint truths = 0u;
+                    for(uint i = 0; i < pixelsPerThreadX; ++i)
+                    {
+                        uint index = i + j * pixelsPerThreadX;
+                        bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
+                        if(all(b4) && localMins[index] < ds)
+                            truths |= (1u << i);
+                        u += uChange.y;
+                        v += vChange.y;
+                        ds += dChange.y;
+                    }
 
                     for(uint i = 0; i < pixelsPerThreadX; ++i)
                     {
-                        bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
                         uint index = i + j * pixelsPerThreadX;
-                        float oldD = localMins[index];
-                        if(d > oldD && all(b4))
+                        if((truths & (1u << i)) != 0)
                         {
                             closestTriangleIndexes[index] = currTriangleIndex;
                             localMins[index] = d;
                         }
-                        u += uChange.y;
-                        v += vChange.y;
                         d += dChange.y;
                     }
                 }
@@ -413,6 +423,7 @@ void main()
 
         if(depth <= 1.0f && depth > 0.0f)
         {
+
             #if USE_PROJECTION
 
                 uint vertexAdding = 2u;
@@ -493,11 +504,10 @@ void main()
 
 
             color =  cc1 * closestWVU.x + cc2 * closestWVU.y + cc3 * closestWVU.z;
-
             // Visualize depth
             //color.rgb = vec3(depth * depth);
             //color.rgb = vec3(depth);
-
+            //color.r = triangleIndex & 255u;
             color.a = 1.0f;
             if(all(lessThanEqual(pixelCoords + ivec2(x, y), screen)))
             {
