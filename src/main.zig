@@ -8,7 +8,7 @@ const engine = @import("engine.zig");
 const utils = @import("utils.zig");
 
 const FontSystem = @import("fontsystem.zig");
-const MeshSystem = @import("meshsystem.zig");
+const MeshSystem = @import("meshsystem2.zig");
 const FlipY = @import("flipy.zig");
 
 const rendertotexture = @import("rendertotexture.zig");

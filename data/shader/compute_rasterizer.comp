@@ -5,7 +5,7 @@
 
 #define USE_SMALL_TRIANGLE_SEPARATION 0
 //#extension GL_KHR_shader_subgroup_arithmetic: enable
-
+#define USE_PROJECTION 0
 
 layout (binding = 0) uniform frame_data
 {
@@ -42,6 +42,10 @@ layout (std430, binding=3) restrict readonly buffer index_data
     uint indices[];
 };
 
+layout (std430, binding = 4, row_major) restrict readonly buffer instance_data
+{
+    mat4 instanceMatrix[];
+};
 
 const uint pixelsPerThreadX = 8;
 const uint pixelsPerThreadY = 1;
@@ -146,34 +150,42 @@ void main()
         //float maxDepth = subgroupMax(localMin);
         if(triangleIndex + threadId < maxTriangle)
         {
-            uint vertexAdding = 2u;
             uint currTriangleIndex = (triangleIndex + threadId) * 3 + 0;
-            uint triangleIndex1 = indices[(currTriangleIndex + 0)];
-            uint triangleIndex2 = indices[(currTriangleIndex + 1)];
-            uint triangleIndex3 = indices[(currTriangleIndex + 2)];
-            VData localTriangle1 = vertexValues[triangleIndex1 * vertexAdding];
-            VData localTriangle2 = vertexValues[triangleIndex2 * vertexAdding];
-            VData localTriangle3 = vertexValues[triangleIndex3 * vertexAdding];
+            #if USE_PROJECTION
+                uint vertexAdding = 2u;
+                uint triangleIndex1 = indices[(currTriangleIndex + 0)];
+                uint triangleIndex2 = indices[(currTriangleIndex + 1)];
+                uint triangleIndex3 = indices[(currTriangleIndex + 2)];
+                VData localTriangle1 = vertexValues[triangleIndex1 * vertexAdding];
+                VData localTriangle2 = vertexValues[triangleIndex2 * vertexAdding];
+                VData localTriangle3 = vertexValues[triangleIndex3 * vertexAdding];
+                vec4 pos0 =  mvp * (matrix_padding * vec4(localTriangle1.pos, 1.0f));
+                vec4 pos1 =  mvp * (matrix_padding * vec4(localTriangle2.pos, 1.0f));
+                vec4 pos2 =  mvp * (matrix_padding * vec4(localTriangle3.pos, 1.0f));
 
+                pos0.w = 1.0f / pos0.w;
+                pos1.w = 1.0f / pos1.w;
+                pos2.w = 1.0f / pos2.w;
 
-            vec4 pos0 =  mvp * (matrix_padding * vec4(localTriangle1.pos, 1.0f));
-            vec4 pos1 =  mvp * (matrix_padding * vec4(localTriangle2.pos, 1.0f));
-            vec4 pos2 =  mvp * (matrix_padding * vec4(localTriangle3.pos, 1.0f));
+                pos0.xyz *= pos0.w;
+                pos1.xyz *= pos1.w;
+                pos2.xyz *= pos2.w;
 
-            pos0.w = 1.0f / pos0.w;
-            pos1.w = 1.0f / pos1.w;
-            pos2.w = 1.0f / pos2.w;
+                vec3 v1 = pos0.xyz;
+                vec3 v2 = pos1.xyz;
+                vec3 v3 = pos2.xyz;
+            #else
+                VData localTriangle1 = vertexValues[currTriangleIndex + 0];
+                VData localTriangle2 = vertexValues[currTriangleIndex + 1];
+                VData localTriangle3 = vertexValues[currTriangleIndex + 2];
 
-            pos0.xyz *= pos0.w;
-            pos1.xyz *= pos1.w;
-            pos2.xyz *= pos2.w;
-
-            vec3 v1 = pos0.xyz;
-            vec3 v2 = pos1.xyz;
-            vec3 v3 = pos2.xyz;
+                vec3 v1 = localTriangle1.pos;
+                vec3 v2 = localTriangle2.pos;
+                vec3 v3 = localTriangle3.pos;
+            #endif
 
             float minZ = min(min(v1.z, v2.z), v3.z);
-            float maxZ = min(1.0f, max(max(v1.z, v2.z), v3.z));
+            float maxZ = max(max(v1.z, v2.z), v3.z);
             //vec3 maxPos = max(max(localTriangle1.pos, localTriangle2.pos), localTriangle3.pos);
 
             vec2 minPos = min(v1, min(v2, v3)).xy - topLeft;
@@ -181,7 +193,7 @@ void main()
 
             //if(!(any(greaterThan(minPos, vec3(topLeft + tileSize, maxDepth))) || any(lessThan(maxPos, vec3(topLeft, 0.0f)))))
             //if(!(any(equal(minPos, maxPos)) || any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))))
-            if(!( any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))))
+            if(!( any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))) && minZ < 1.0f && maxZ > 0.0f)
             {
                 minPos.xy = max(minPos.xy, vec2(0.0f)) * 0.25f * screen;
                 maxPos.xy = min(maxPos.xy, tileSizeScreen) * 0.25f * screen;
@@ -228,7 +240,7 @@ void main()
                         all(lessThan(d, vec4(0.0f))) || all(greaterThan(d, vec4(1.0)))
                     );
 
-                bool addTriangles =  visible && det > 0.0f && maxZ > maxDepth;
+                bool addTriangles = visible && det > 0.0f && maxZ > maxDepth;
 
                 //uint localIndex = subgroupInclusiveAdd(addTriangles ? 1 : 0);
                 //uint addedTriangles = subgroupMax(localIndex);
@@ -287,8 +299,8 @@ void main()
                         bool newVisible = (oldBits & newBits) == 0;
                         uint visibilityBit = 1 << i;
 
-                        float newMinD = min(d.z, d.w);
-                        float minMinD = min(newMinD, prevMinD);
+                        float newMinD = max(d.z, d.w);
+                        float minMinD = max(newMinD, prevMinD);
                         // Faster if not testing the uv hitting...
                         bool addVisibilityBit = minMinD > localMinDepth && newVisible;
                         visibility |= addVisibilityBit ? visibilityBit : 0;
@@ -548,16 +560,46 @@ void main()
 #endif
         if(depth <= 1.0f && depth > 0.0f)
         {
-            uint vertexAdding = 2u;
+            #if USE_PROJECTION
 
-            uint triangleIndex1 = indices[triangleIndex + 0];
-            uint triangleIndex2 = indices[triangleIndex + 1];
-            uint triangleIndex3 = indices[triangleIndex + 2];
+                uint vertexAdding = 2u;
+
+                uint triangleIndex1 = indices[triangleIndex + 0];
+                uint triangleIndex2 = indices[triangleIndex + 1];
+                uint triangleIndex3 = indices[triangleIndex + 2];
 
 
-            VData closest1 = vertexValues[triangleIndex1 * vertexAdding];
-            VData closest2 = vertexValues[triangleIndex2 * vertexAdding];
-            VData closest3 = vertexValues[triangleIndex3 * vertexAdding];
+                VData closest1 = vertexValues[triangleIndex1 * vertexAdding];
+                VData closest2 = vertexValues[triangleIndex2 * vertexAdding];
+                VData closest3 = vertexValues[triangleIndex3 * vertexAdding];
+
+                vec4 pos0 =  mvp * (matrix_padding * vec4(closest1.pos, 1.0f));
+                vec4 pos1 =  mvp * (matrix_padding * vec4(closest2.pos, 1.0f));
+                vec4 pos2 =  mvp * (matrix_padding * vec4(closest3.pos, 1.0f));
+
+                pos0.w = 1.0f / pos0.w;
+                pos1.w = 1.0f / pos1.w;
+                pos2.w = 1.0f / pos2.w;
+
+                pos0.xyz *= pos0.w;
+                pos1.xyz *= pos1.w;
+                pos2.xyz *= pos2.w;
+
+                vec3 v1 = pos0.xyz;
+                vec3 v2 = pos1.xyz;
+                vec3 v3 = pos2.xyz;
+
+
+
+            #else
+                VData closest1 = vertexValues[triangleIndex + 0];
+                VData closest2 = vertexValues[triangleIndex + 1];
+                VData closest3 = vertexValues[triangleIndex + 2];
+
+                vec3 v1 = closest1.pos;
+                vec3 v2 = closest2.pos;
+                vec3 v3 = closest3.pos;
+            #endif
 
             uvec4 c1 = uvec4((closest1.col & 255u), (closest1.col >> 8u) & 255u, (closest1.col >> 16u) & 255u, (closest1.col >> 24u) & 255u);
             uvec4 c2 = uvec4((closest2.col & 255u), (closest2.col >> 8u) & 255u, (closest2.col >> 16u) & 255u, (closest2.col >> 24u) & 255u);
@@ -567,22 +609,6 @@ void main()
             vec4 cc3 = c3 / 255.0f;
 
 
-
-            vec4 pos0 =  mvp * (matrix_padding * vec4(closest1.pos, 1.0f));
-            vec4 pos1 =  mvp * (matrix_padding * vec4(closest2.pos, 1.0f));
-            vec4 pos2 =  mvp * (matrix_padding * vec4(closest3.pos, 1.0f));
-
-            pos0.w = 1.0f / pos0.w;
-            pos1.w = 1.0f / pos1.w;
-            pos2.w = 1.0f / pos2.w;
-
-            pos0.xyz *= pos0.w;
-            pos1.xyz *= pos1.w;
-            pos2.xyz *= pos2.w;
-
-            vec3 v1 = pos0.xyz;
-            vec3 v2 = pos1.xyz;
-            vec3 v3 = pos2.xyz;
 
             // flip e1 and e2 for CW
             vec3 e1 = v2 - v1;

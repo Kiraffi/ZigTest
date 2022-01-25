@@ -79,7 +79,7 @@ pub fn init() bool
                 v.pos[j] = f;
             }
         }
-        if(true)
+        if(false)
         {
             j = i / 3;
             const k: usize = j + 0; // breaks if on same x-line 2 points as in j + 0...
@@ -107,21 +107,6 @@ pub fn init() bool
         meshesVertices[i] = v;
     }
 
-    var kk: u32 = 100;
-
-    meshesVertices[kk * 3 + 0].pos[0] = 0.0;
-    meshesVertices[kk * 3 + 0].pos[1] = 0.0;
-    meshesVertices[kk * 3 + 1].pos[0] = 1.0;
-    meshesVertices[kk * 3 + 2].pos[0] = -1.0;
-    meshesVertices[kk * 3 + 2].pos[1] = 1.0;
-    kk *= 3;
-    kk += 9;
-    while(kk < MAX_VERTICES / 128) : (kk += 1)
-    {
-        meshesVertices[kk].pos[0] = 0.0;
-
-    }
-
     meshBuffer = ogl.ShaderBuffer.createBuffer(c.GL_SHADER_STORAGE_BUFFER, MAX_VERTICES * @sizeOf(Vertex), &meshesVertices, c.GL_STATIC_DRAW);//GL_DYNAMIC_COPY);
     if(!meshBuffer.isValid())
     {
@@ -137,6 +122,7 @@ pub fn deinit() void
     ibo.deleteBuffer();
     meshBuffer.deleteBuffer();
     program.deleteProgram();
+    computeProgram.deleteProgram();
 }
 
 
@@ -147,13 +133,14 @@ pub fn draw(texture: ogl.Texture) void
 
     meshBuffer.bind(2);
     c.glEnable(c.GL_CULL_FACE);
-    c.glCullFace(c.GL_BACK);
+    //c.glCullFace(c.GL_BACK);
+    c.glCullFace(c.GL_FRONT);
     //c.glFrontFace(c.GL_CW);
-    c.glFrontFace(c.GL_CCW);
+    c.glFrontFace(c.GL_CW);
     c.glDisable(c.GL_BLEND);
     c.glEnable(c.GL_DEPTH_TEST);
-    c.glDepthFunc(c.GL_LESS);
-    c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, MAX_VERTICES / 64));
+    c.glDepthFunc(c.GL_GREATER);
+    c.glDrawArrays( c.GL_TRIANGLES, 0, 24 * 3);// @intCast(c_int, MAX_VERTICES / 64));
     //c.glDrawArrays( c.GL_TRIANGLES, 0, @intCast(c_int, 15 * 3));
 
     c.glDisable(c.GL_CULL_FACE);
