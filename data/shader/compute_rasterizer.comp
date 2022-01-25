@@ -3,7 +3,6 @@
 #define THREAD_GROUP_SIZE 64
 #define USE_SHARED_VERTICES 1
 
-#define USE_SMALL_TRIANGLE_SEPARATION 0
 //#extension GL_KHR_shader_subgroup_arithmetic: enable
 #define USE_PROJECTION 0
 
@@ -60,14 +59,6 @@ layout(local_size_x = x_threads, local_size_y = y_threads , local_size_z = 1) in
 layout(rgba8, binding = 0) uniform image2D outputImage;
 
 
-
-#if USE_SMALL_TRIANGLE_SEPARATION
-    //shared uint visibleSmallTriangleIndices[threads];
-    //shared uint visibleSmallTriangleCount;
-    shared uint depthBuffer[threads * pixelsPerThread];
-    shared uint depthBufferTriangle[threads * pixelsPerThread];
-#endif
-
 #if USE_SHARED_VERTICES
     shared VData triangles[threads * 3];
 #else
@@ -105,9 +96,6 @@ void main()
         uint y = i / pixelsPerThreadX;
         if(all(lessThanEqual(pixelCoords + ivec2(x, y), screen)))
             localMins[i] = 0.0f;
-        #if USE_SMALL_TRIANGLE_SEPARATION
-            depthBuffer[threadId * pixelsPerThread + i] = floatBitsToUint(2.0f);
-        #endif
     }
 
     vec3 rDir = vec3(0.0f, 0.0f, -1.0f);
@@ -128,9 +116,6 @@ void main()
         {
             maxDepthShared = floatBitsToUint(localMin);
             visibleTriangles = 0;
-            #if USE_SMALL_TRIANGLE_SEPARATION
-                //visibleSmallTriangleCount = 0;
-            #endif
         }
         if(threadId % THREAD_GROUP_SIZE == 0)
         {
@@ -248,22 +233,6 @@ void main()
                 //uint addedTriangles = subgroupMax(localIndex);
                 //localIndex -= 1;
 
-                #if USE_SMALL_TRIANGLE_SEPARATION
-                    minPos = floor(minPos);
-                    maxPos = ceil(maxPos);
-                    vec2 sz = maxPos - minPos;
-
-                    minPos.x = clamp(minPos.x, 0.0f, pixelsPerThreadX * x_threads - 1);
-                    minPos.y = clamp(minPos.y, 0.0f, pixelsPerThreadY * y_threads - 1);
-                    maxPos.x = clamp(maxPos.x, 0.0f, pixelsPerThreadX * x_threads - 1);
-                    maxPos.y = clamp(maxPos.y, 0.0f, pixelsPerThreadY * y_threads - 1);
-
-                    //sz = floor(max(sz, vec2(1.0f)));
-
-                    float triangleSize = sz.x * sz.y;
-                    bool isSmallTriangle = triangleSize < 4.0f;
-                #endif
-
                 if(addTriangles)
                 {
 
@@ -312,9 +281,6 @@ void main()
                         prevMinD = newMinD;
                     }
                     bool adding = visibility != 0;
-                    #if USE_SMALL_TRIANGLE_SEPARATION
-                        adding = (!isSmallTriangle) && adding;
-                    #endif
                     if(adding)
                     {
                         uint area =
@@ -324,15 +290,7 @@ void main()
                             ((uint(maxPos.y) & 255u) << 24u);
 
                         uint localIndex = atomicAdd(visibleTriangles, 1);
-                        #if USE_SMALL_TRIANGLE_SEPARATION && 0
-                            if(smallTriangle)// && visibility == 0)
-                            {
-                                visibility = 0;
-                                uint smallTriangleIndex = atomicAdd(visibleSmallTriangleCount, 1);
-                                visibleSmallTriangleIndices[smallTriangleIndex] = localIndex;
 
-                            }
-                        #endif
                         #if USE_SHARED_VERTICES
 
                             localTriangle1.col = currTriangleIndex + 0;
@@ -351,53 +309,6 @@ void main()
                             triangleIndexes[localIndex + 1 * threads] =  visibility;
                         #endif
                     }
-                    #if USE_SMALL_TRIANGLE_SEPARATION
-                    else if(isSmallTriangle)
-                    {
-                        uint area =
-                            ((uint(minPos.x) & 255u) << 0u) |
-                            ((uint(minPos.y) & 255u) << 8u) |
-                            ((uint(maxPos.x) & 255u) << 16u) |
-                            ((uint(maxPos.y) & 255u) << 24u);
-
-                        uint startX = (area >> 0u) & 255u;
-                        uint startY = (area >> 8u) & 255u;
-
-                        uint endX = (area >> 16u) & 255u;
-                        uint endY = (area >> 24u) & 255u;
-                        //for(uint j = 0; j < y_threads * pixelsPerThreadY; ++j)
-                        for(uint j = startY; j <= endY; ++j)
-                        {
-                            float u = dot(uChange, vec3(1.0f, 0.0f, j));
-                            float v = dot(vChange, vec3(1.0f, 0.0f, j));
-                            float d = dot(dChange, vec3(1.0f, 0.0f, j));
-
-                            //for(uint i = 0; i < x_threads * pixelsPerThreadX; ++i)
-                            for(uint i = startX; i <= endX; ++i)
-                            {
-                                bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
-                                if(all(b4))
-                                {
-                                    if(d > 0.0f && d <= 1.0)// maxDepth)
-                                    {
-                                        uint index = j * x_threads * pixelsPerThreadX + i;
-                                        //if(d < uintBitsToFloat(depthBuffer[index]))
-                                        {
-                                            float dd = uintBitsToFloat(atomicMin(depthBuffer[index], floatBitsToUint(d)));
-                                            if(d > dd)
-                                            {
-                                                depthBufferTriangle[index] = currTriangleIndex;
-                                            }
-                                        }
-                                    }
-                                }
-                                u += uChange.y;
-                                v += vChange.y;
-                                d += dChange.y;
-                            }
-                        }
-                    }
-                    #endif
                 }
             }
         }
@@ -405,58 +316,6 @@ void main()
         memoryBarrierShared();
         barrier();
 
-#if USE_SMALL_TRIANGLE_SEPARATION && 0
-        if(threadId < visibleSmallTriangleCount)
-        {
-            uint tIndex = visibleSmallTriangleIndices[threadId];
-            VData localTriangle1 = triangles[tIndex + 0 * threads];
-            VData localTriangle2 = triangles[tIndex + 1 * threads];
-            VData localTriangle3 = triangles[tIndex + 2 * threads];
-            vec3 uChange = localTriangle1.pos;
-            vec3 vChange = localTriangle2.pos;
-            vec3 dChange = localTriangle3.pos;
-
-            uint currTriangleIndex = localTriangle1.col;
-            uint area = localTriangle3.col;
-
-            uint startX = (area >> 0u) & 255u;
-            uint startY = (area >> 8u) & 255u;
-
-            uint endX = (area >> 16u) & 255u;
-            uint endY = (area >> 24u) & 255u;
-            for(uint j = 0; j < y_threads * pixelsPerThreadY; ++j)
-            //for(uint j = startY; j <= endY; ++j)
-            {
-                float u = dot(uChange, vec3(1.0f, 0.0f, j));
-                float v = dot(vChange, vec3(1.0f, 0.0f, j));
-                float d = dot(dChange, vec3(1.0f, 0.0f, j));
-
-                //for(uint i = 0; i < x_threads * pixelsPerThreadX; ++i)
-                for(uint i = startX; i <= endX; ++i)
-                {
-                    bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
-                    if(all(b4))
-                    {
-                        if(d >= 0.0f && d <= 1.0)// maxDepth)
-                        {
-                            uint index = j * x_threads * pixelsPerThreadX + i;
-                            //if(d < uintBitsToFloat(depthBuffer[index]))
-                            {
-                                float dd = uintBitsToFloat(atomicMin(depthBuffer[index], floatBitsToUint(d)));
-                                if(d > dd)
-                                {
-                                    depthBufferTriangle[index] = currTriangleIndex;
-                                }
-                            }
-                        }
-                    }
-                    u += uChange.y;
-                    v += vChange.y;
-                    d += dChange.y;
-                }
-            }
-        }
-#endif
 #if 1
         uint addedTriangles = visibleTriangles;
         for(uint t = 0; t < addedTriangles; t += 1)
@@ -551,15 +410,7 @@ void main()
 
         float depth = localMins[i];
         uint triangleIndex = closestTriangleIndexes[i];
-#if USE_SMALL_TRIANGLE_SEPARATION
-        uint index = (startIndex.y + y) * pixelsPerThreadX * x_threads + startIndex.x + x;
-        float depth2 = uintBitsToFloat(depthBuffer[index]);
-        if(depth2 < depth)
-        {
-            triangleIndex = depthBufferTriangle[index];
-            depth = depth2;
-        }
-#endif
+
         if(depth <= 1.0f && depth > 0.0f)
         {
             #if USE_PROJECTION
