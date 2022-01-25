@@ -65,6 +65,44 @@ layout(rgba8, binding = 0) uniform image2D outputImage;
     shared uint triangleIndexes[threads * 2];
 #endif
 shared uint maxDepths[threads / THREAD_GROUP_SIZE];
+
+void getUVD(vec3 v1, vec3 v2, vec3 v3, vec2 topLeft, vec2 screen, inout vec3 uChange, inout vec3 vChange, inout vec3 dChange, inout float det)
+{
+    // flip e1 and e2 for CW
+    vec3 e1 = (v2 - v1).xyz;
+    vec3 e2 = (v3 - v1).xyz;
+
+    // breaks if e2.x == 0.0f
+    if(e1.x == 0.0f) e1.x += 1.0e-30f;
+    if(e1.y == 0.0f) e1.y += 1.0e-30f;
+    if(e1.z == 0.0f) e1.z += 1.0e-30f;
+    if(e2.x == 0.0f) e2.x += 1.0e-30f;
+    if(e2.y == 0.0f) e2.y += 1.0e-30f;
+    if(e2.z == 0.0f) e2.z += 1.0e-30f;
+
+    vec2 pvec = vec2(e2.y, -e2.x); //cross(rDir, e2);
+    det = dot(e1.xy, pvec.xy);
+
+
+    vec3 tvecStart = vec3(topLeft, 0.0f) - v1.xyz;
+
+    //vec3 tvecXOffset = 2.0f / screen.x; // vec3(vec2(2.0f, 0.0f) / screen, 0.0f);
+    //vec3 tvecYOffset = 2.0f / screen.y; // vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
+    float tvecXOffset = 2.0f / screen.x; // vec3(vec2(2.0f, 0.0f) / screen, 0.0f);
+    float tvecYOffset = 2.0f / screen.y; // vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
+
+    vec3 qvecStart   = cross(tvecStart,   e1);
+    vec3 qvecXOffset = vec3(0.0f, -tvecXOffset * e1.z, tvecXOffset * e1.y); //cross(tvecXOffset, e1);
+    vec3 qvecYOffset = vec3(tvecYOffset * e1.z, 0.0f, -tvecYOffset * e1.x); //cross(tvecYOffset, e1);
+
+    float invDet = 1.0f / det;
+
+    uChange = vec3(dot(tvecStart.xy, pvec), tvecXOffset * pvec.x, tvecYOffset * pvec.y) * invDet;
+    vChange = vec3(qvecStart.z, qvecXOffset.z, qvecYOffset.z) * (-invDet); // dot rdir
+    dChange = vec3(dot(qvecStart, e2), dot(qvecXOffset.yz, e2.yz), dot(qvecYOffset.xz, e2.xz)) * (-invDet);
+
+}
+
 void main()
 {
     vec2 pixelCoords = vec2(gl_GlobalInvocationID.xy) * vec2(pixelsPerThreadX, pixelsPerThreadY);
@@ -98,10 +136,7 @@ void main()
             localMins[i] = 0.0f;
     }
 
-    vec3 rDir = vec3(0.0f, 0.0f, -1.0f);
-
-    vec3 tvecXOffset = vec3(vec2(2.0f, 0.0f) / screen, 0.0f);
-    vec3 tvecYOffset = vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
+    //vec3 rDir = vec3(0.0f, 0.0f, -1.0f);
 
     uint blockId = threadId / THREAD_GROUP_SIZE;
     //uint maxTriangle = 24; // 1048576 / (64); // 15 * 64;
@@ -185,33 +220,11 @@ void main()
                 minPos.xy = max(minPos.xy, vec2(0.0f)) * 0.25f * screen;
                 maxPos.xy = min(maxPos.xy, tileSizeScreen) * 0.25f * screen;
 
-                // flip e1 and e2 for CW
-                vec3 e1 = (v2 - v1).xyz;
-                vec3 e2 = (v3 - v1).xyz;
-
-                // breaks if e2.x == 0.0f
-                if(e1.x == 0.0f) e1.x += 1.0e-30f;
-                if(e1.y == 0.0f) e1.y += 1.0e-30f;
-                if(e1.z == 0.0f) e1.z += 1.0e-30f;
-                if(e2.x == 0.0f) e2.x += 1.0e-30f;
-                if(e2.y == 0.0f) e2.y += 1.0e-30f;
-                if(e2.z == 0.0f) e2.z += 1.0e-30f;
-
-                vec2 pvec = vec2(e2.y, -e2.x); //cross(rDir, e2);
-                float det = dot(e1.xy, pvec.xy);
-
-
-                vec3 tvecStart = vec3(topLeft, 0.0f) - v1.xyz;
-
-                vec3 qvecStart   = cross(tvecStart,   e1);
-                vec3 qvecXOffset = cross(tvecXOffset, e1);
-                vec3 qvecYOffset = cross(tvecYOffset, e1);
-
-                float invDet = 1.0f / det;
-
-                vec3 uChange = vec3(dot(tvecStart.xy, pvec), dot(tvecXOffset.xy, pvec), dot(tvecYOffset.xy, pvec)) * invDet;
-                vec3 vChange = vec3(dot(qvecStart, rDir), dot(qvecXOffset, rDir), dot(qvecYOffset, rDir)) * invDet;
-                vec3 dChange = vec3(dot(qvecStart, e2), dot(qvecXOffset, e2), dot(qvecYOffset, e2)) * (-invDet);
+                vec3 uChange;
+                vec3 vChange;
+                vec3 dChange;
+                float det;
+                getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
                 vec4 u = vec4(0.0f, uChange.y * tileSize.x, uChange.z * tileSize.y, uChange.y * tileSize.x + uChange.z * tileSize.y) + uChange.x;
                 vec4 v = vec4(0.0f, vChange.y * tileSize.x, vChange.z * tileSize.y, vChange.y * tileSize.x + vChange.z * tileSize.y) + vChange.x;
@@ -347,25 +360,12 @@ void main()
                     vec3 v2 = localTriangle2.pos;
                     vec3 v3 = localTriangle3.pos;
 
-                    // flip e1 and e2 for CW
-                    vec3 e1 = v2 - v1;
-                    vec3 e2 = v3 - v1;
+                    vec3 uChange;
+                    vec3 vChange;
+                    vec3 dChange;
+                    float det;
+                    getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
-                    vec3 pvec = cross(rDir, e2);
-                    float det = dot(e1, pvec);
-
-
-                    vec3 tvecStart = vec3(topLeft, 0.0f) - v1;
-
-                    vec3 qvecStart   = cross(tvecStart,   e1);
-                    vec3 qvecXOffset = cross(tvecXOffset, e1);
-                    vec3 qvecYOffset = cross(tvecYOffset, e1);
-
-                    float invDet = 1.0f / det;
-
-                    vec3 uChange = vec3(dot(tvecStart, pvec), dot(tvecXOffset, pvec), dot(tvecYOffset, pvec)) * invDet;
-                    vec3 vChange = vec3(dot(qvecStart, rDir), dot(qvecXOffset, rDir), dot(qvecYOffset, rDir)) * invDet;
-                    vec3 dChange = vec3(dot(qvecStart, e2), dot(qvecXOffset, e2), dot(qvecYOffset, e2)) * (-invDet);
                 #endif
 
 
@@ -380,27 +380,33 @@ void main()
                     float u = dot(uChange, vec3(1.0f, xOff, yOff));
                     float v = dot(vChange, vec3(1.0f, xOff, yOff));
                     float d = dot(dChange, vec3(1.0f, xOff, yOff));
-                    float ds = d;
-                    uint truths = 0u;
-                    for(uint i = 0; i < pixelsPerThreadX; ++i)
-                    {
-                        uint index = i + j * pixelsPerThreadX;
-                        bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
-                        if(all(b4) && localMins[index] < ds)
-                            truths |= (1u << i);
-                        u += uChange.y;
-                        v += vChange.y;
-                        ds += dChange.y;
-                    }
+
+// intel doesnt like this... even with shared vertex 0
+//                    float ds = d;
+//                    uint newDepths = 0u;
+//                    for(uint i = 0; i < pixelsPerThreadX; ++i)
+//                    {
+//                        uint index = i + j * pixelsPerThreadX;
+//                        bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
+//                        if(all(b4) && localMins[index] < ds)
+//                            newDepths |= (1u << i);
+//                        u += uChange.y;
+//                        v += vChange.y;
+//                        ds += dChange.y;
+//                    }
 
                     for(uint i = 0; i < pixelsPerThreadX; ++i)
                     {
                         uint index = i + j * pixelsPerThreadX;
-                        if((truths & (1u << i)) != 0)
+                        bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
+                        if(all(b4) && d > localMins[index])
+                        //if((newDepths & (1u << i)) != 0)
                         {
                             closestTriangleIndexes[index] = currTriangleIndex;
                             localMins[index] = d;
                         }
+                        u += uChange.y;
+                        v += vChange.y;
                         d += dChange.y;
                     }
                 }
@@ -474,24 +480,11 @@ void main()
 
 
 
-            // flip e1 and e2 for CW
-            vec3 e1 = v2 - v1;
-            vec3 e2 = v3 - v1;
-
-            vec3 pvec = cross(rDir, e2);
-            float det = dot(e1, pvec);
-
-            vec3 tvecStart = vec3(topLeft, 0.0f) - v1;
-
-            vec3 qvecStart   = cross(tvecStart,   e1);
-            vec3 qvecXOffset = cross(tvecXOffset, e1);
-            vec3 qvecYOffset = cross(tvecYOffset, e1);
-
-            float invDet = 1.0f / det;
-
-            vec3 uChange = vec3(dot(tvecStart, pvec), dot(tvecXOffset, pvec), dot(tvecYOffset, pvec)) * invDet;
-            vec3 vChange = vec3(dot(qvecStart, rDir), dot(qvecXOffset, rDir), dot(qvecYOffset, rDir)) * invDet;
-            vec3 dChange = vec3(dot(qvecStart, e2), dot(qvecXOffset, e2), dot(qvecYOffset, e2)) * (-invDet);
+            vec3 uChange;
+            vec3 vChange;
+            vec3 dChange;
+            float det;
+            getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
             vec3 dotXY = vec3(1.0f, float(threadId % x_threads) * pixelsPerThreadX + x,
                 float(threadId / x_threads) * pixelsPerThreadY + y);
