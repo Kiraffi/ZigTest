@@ -214,7 +214,7 @@ void main()
 
             //if(!(any(greaterThan(minPos, vec3(topLeft + tileSize, maxDepth))) || any(lessThan(maxPos, vec3(topLeft, 0.0f)))))
             //if(!(any(equal(minPos, maxPos)) || any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))))
-            if(!( any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))) &&
+            if(!( any(greaterThan(minPos, tileSizeScreen)) || any(lessThan(maxPos, vec2(0.0f)))) &&
                 minZ <= 1.0f && maxZ > maxDepth)
             {
                 minPos.xy = max(minPos.xy, vec2(0.0f)) * 0.25f * screen;
@@ -394,16 +394,16 @@ void main()
 //                        v += vChange.y;
 //                        ds += dChange.y;
 //                    }
-
+                    //uint index = j * pixelsPerThreadX;
                     for(uint i = 0; i < pixelsPerThreadX; ++i)
                     {
-                        uint index = i + j * pixelsPerThreadX;
-                        bvec4 b4 = bvec4(u >= 0.0f, u <= 1.0f, v >= 0.0f, u + v <= 1.0f);
-                        if(all(b4) && d > localMins[index])
-                        //if((newDepths & (1u << i)) != 0)
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f)
                         {
-                            closestTriangleIndexes[index] = currTriangleIndex;
-                            localMins[index] = d;
+                            if(d > localMins[i])
+                            {
+                                localMins[i] = d;
+                                closestTriangleIndexes[i] = currTriangleIndex;
+                            }
                         }
                         u += uChange.y;
                         v += vChange.y;
