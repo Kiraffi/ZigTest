@@ -220,10 +220,10 @@ void main()
                 minPos.xy = max(minPos.xy, vec2(0.0f)) * 0.25f * screen;
                 maxPos.xy = min(maxPos.xy, tileSizeScreen) * 0.25f * screen;
 
-                vec3 uChange;
-                vec3 vChange;
-                vec3 dChange;
-                float det;
+                vec3 uChange = vec3(0);
+                vec3 vChange = vec3(0);
+                vec3 dChange = vec3(0);
+                float det = 0.0f;
                 getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
                 vec4 u = vec4(0.0f, uChange.y * tileSize.x, uChange.z * tileSize.y, uChange.y * tileSize.x + uChange.z * tileSize.y) + uChange.x;
@@ -360,10 +360,10 @@ void main()
                     vec3 v2 = localTriangle2.pos;
                     vec3 v3 = localTriangle3.pos;
 
-                    vec3 uChange;
-                    vec3 vChange;
-                    vec3 dChange;
-                    float det;
+                    vec3 uChange = vec3(0);
+                    vec3 vChange = vec3(0);
+                    vec3 dChange = vec3(0);
+                    float det = 0.0f;
                     getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
                 #endif
@@ -480,10 +480,10 @@ void main()
 
 
 
-            vec3 uChange;
-            vec3 vChange;
-            vec3 dChange;
-            float det;
+            vec3 uChange = vec3(0);
+            vec3 vChange = vec3(0);
+            vec3 dChange = vec3(0);
+            float det = 0.0f;
             getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
             vec3 dotXY = vec3(1.0f, float(threadId % x_threads) * pixelsPerThreadX + x,
