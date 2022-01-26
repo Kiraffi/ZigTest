@@ -61,9 +61,6 @@ layout(rgba8, binding = 0) uniform image2D outputImage;
 
 #if USE_SHARED_VERTICES
     shared VData triangles[threads * 3];
-    //shared float d0[threads];
-    //shared float d1[threads];
-    //shared float d2[threads];
 #else
     shared uint triangleIndexes[threads * 2];
 #endif
@@ -89,8 +86,6 @@ void getUVD(vec3 v1, vec3 v2, vec3 v3, vec2 topLeft, vec2 screen, inout vec3 uCh
 
     vec3 tvecStart = vec3(topLeft, 0.0f) - v1.xyz;
 
-    //vec3 tvecXOffset = 2.0f / screen.x; // vec3(vec2(2.0f, 0.0f) / screen, 0.0f);
-    //vec3 tvecYOffset = 2.0f / screen.y; // vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
     float tvecXOffset = 2.0f / screen.x; // vec3(vec2(2.0f, 0.0f) / screen, 0.0f);
     float tvecYOffset = 2.0f / screen.y; // vec3(vec2(0.0f, 2.0f) / screen, 0.0f);
 
@@ -115,40 +110,17 @@ void main()
     uvec2 startIndex = uvec2((threadId % x_threads) * pixelsPerThreadX, (threadId / x_threads) * pixelsPerThreadY);
 
 
-    vec2 tileSize = vec2(x_threads, y_threads) * vec2(pixelsPerThreadX, pixelsPerThreadY);
 
-    vec2 topLeft = (vec2(gl_WorkGroupID.xy) * tileSize) + vec2(0.5f);
-    vec2 bottomRight = topLeft + tileSize;
-    topLeft = (topLeft / screen) * 2.0f - 1.0f;
-    bottomRight = (bottomRight / screen) * 2.0f - 1.0f;
-    vec2 tileSizeScreen = (tileSize / screen) * 2.0f;
-
-    //float localMin = 2.0f;
-    //float localMins[pixelsPerThread];
     vec4 localMins1 = vec4(0.0);
     vec4 localMins2 = vec4(0.0);
     vec4 localMins3 = vec4(0.0);
     vec4 localMins4 = vec4(0.0);
-
-   //uint closestTriangleIndexes[pixelsPerThread]; // = uvec4(0u);
 
    uvec4 closestTriangleIndexes1 = uvec4(0u);
    uvec4 closestTriangleIndexes2 = uvec4(0u);
    uvec4 closestTriangleIndexes3 = uvec4(0u);
    uvec4 closestTriangleIndexes4 = uvec4(0u);
 
-    //uint closestTriangleIndex = 0u;
-    //uint closestTriangleIndexes[pixelsPerThread]; // = uvec4(0u);
-
-//    for(uint i = 0; i < pixelsPerThread; ++i)
-//    {
-//        closestTriangleIndexes[i] = 0;
-//        uint x = i % pixelsPerThreadX;
-//        uint y = i / pixelsPerThreadX;
-//        localMins[i] = 0.0f;
-//    }
-
-    //vec3 rDir = vec3(0.0f, 0.0f, -1.0f);
 
     uint blockId = threadId / THREAD_GROUP_SIZE;
     //uint maxTriangle = 24; // 1048576 / (64); // 15 * 64;
@@ -156,9 +128,7 @@ void main()
     for(uint triangleIndex = 0; triangleIndex < maxTriangle; triangleIndex += threads)
     {
         vec4 lt = min(min(localMins1, localMins2), min(localMins3, localMins4));
-        float localMin = min(min(lt.x, lt.y), min(lt.z, lt.w));//localMins[0];
-//        for(uint i = 1; i < pixelsPerThread; ++i)
-//            localMin = min(localMin, localMins[i]);
+        float localMin = min(min(lt.x, lt.y), min(lt.z, lt.w));
 
         if(threadId == 0)
         {
@@ -222,11 +192,16 @@ void main()
             float maxZ = max(max(v1.z, v2.z), v3.z);
             //vec3 maxPos = max(max(localTriangle1.pos, localTriangle2.pos), localTriangle3.pos);
 
+
+            vec2 tileSize = vec2(x_threads, y_threads) * vec2(pixelsPerThreadX, pixelsPerThreadY);
+
+            vec2 topLeft = (vec2(gl_WorkGroupID.xy) * tileSize) + vec2(0.5f);
+            topLeft = (topLeft / screen) * 2.0f - 1.0f;
+            vec2 tileSizeScreen = (tileSize / screen) * 2.0f;
+
             vec2 minPos = min(v1, min(v2, v3)).xy - topLeft;
             vec2 maxPos = max(v1, max(v2, v3)).xy - topLeft;
 
-            //if(!(any(greaterThan(minPos, vec3(topLeft + tileSize, maxDepth))) || any(lessThan(maxPos, vec3(topLeft, 0.0f)))))
-            //if(!(any(equal(minPos, maxPos)) || any(bvec4(greaterThan(minPos, tileSizeScreen), lessThan(maxPos, vec2(0.0f))))))
             if(!( any(greaterThan(minPos, tileSizeScreen)) || any(lessThan(maxPos, vec2(0.0f)))) &&
                 minZ <= 1.0f && maxZ > maxDepth)
             {
@@ -332,9 +307,6 @@ void main()
                             triangles[localIndex + 0 * threads] = localTriangle1;
                             triangles[localIndex + 1 * threads] = localTriangle2;
                             triangles[localIndex + 2 * threads] = localTriangle3;
-                            //d0[(localIndex + 0) % (threads)] = dChange.x;
-                            //d1[(localIndex + 0) % (threads)] = dChange.y;
-                            //d2[(localIndex + 0) % (threads)] = dChange.z;
                         #else
                             triangleIndexes[localIndex + 0 * threads] =  currTriangleIndex + 0;
                             triangleIndexes[localIndex + 1 * threads] =  visibility;
@@ -348,27 +320,26 @@ void main()
         barrier();
 
 #if 1
-        uint addedTriangles = visibleTriangles;
-        for(uint t = 0; t < addedTriangles; t += 1)
+        //uint addedTriangles = visibleTriangles;
+        for(uint t = visibleTriangles; t > 0; t -= 1)
         {
             #if USE_SHARED_VERTICES
-                VData localTriangle2 = triangles[t + 1 * threads];
+                VData localTriangle2 = triangles[t - 1 + 1 * threads];
                 uint visibility = localTriangle2.col;
             #else
-                uint visibility = triangleIndexes[t + 1 * threads];
+                uint visibility = triangleIndexes[t - 1 + 1 * threads];
             #endif
             //if((visibility & (1u << blockId)) != 0)
             {
                 #if USE_SHARED_VERTICES
-                    VData localTriangle1 = triangles[t + 0 * threads];
-                    VData localTriangle3 = triangles[t + 2 * threads];
+                    VData localTriangle1 = triangles[t - 1 + 0 * threads];
+                    VData localTriangle3 = triangles[t - 1 + 2 * threads];
                     vec3 uChange = localTriangle1.pos;
                     vec3 vChange = localTriangle2.pos;
                     vec3 dChange = localTriangle3.pos;
-                    //vec3 dChange = vec3(d0[(t + 0) % threads], d1[(t + 0) % threads], d2[(t + 0) % threads]);
                     uint currTriangleIndex = localTriangle1.col;
                 #else
-                    uint currTriangleIndex = triangleIndexes[t + 0 * threads];
+                    uint currTriangleIndex = triangleIndexes[t - 1 + 0 * threads];
                     VData localTriangle1 = vertexValues[currTriangleIndex + 0];
                     VData localTriangle2 = vertexValues[currTriangleIndex + 1];
                     VData localTriangle3 = vertexValues[currTriangleIndex + 2];
@@ -381,6 +352,11 @@ void main()
                     vec3 vChange = vec3(0);
                     vec3 dChange = vec3(0);
                     float det = 0.0f;
+
+                    vec2 tileSize = vec2(x_threads, y_threads) * vec2(pixelsPerThreadX, pixelsPerThreadY);
+                    vec2 topLeft = (vec2(gl_WorkGroupID.xy) * tileSize) + vec2(0.5f);
+                    topLeft = (topLeft / screen) * 2.0f - 1.0f;
+
                     getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
                 #endif
@@ -411,54 +387,28 @@ void main()
 //                        v += vChange.y;
 //                        ds += dChange.y;
 //                    }
-                    //uint index = j * pixelsPerThreadX;
-                    for(uint k = 0; k < 4; ++k)
+                    for(uint k = 0; k < pixelsPerThreadX / 4; ++k)
                     {
                         vec4 dd = vec4(0);
                         uvec4 currents = uvec4(0);
-                        if(k == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
-                        if(k == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
-                        if(k == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
-                        if(k == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+                        if(k + j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
+                        if(k + j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
+                        if(k + j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
+                        if(k + j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
 
-                        for(uint i = 0; i < pixelsPerThreadX / 4; ++i)
-                        {
-                            if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f)
-                            {
-                                if(i == 0 && d > dd.x)
-                                {
-                                    dd.x = d;
-                                    currents.x = currTriangleIndex;
-                                }
-                                else if(i == 1 && d > dd.y)
-                                {
-                                    dd.y = d;
-                                    currents.y = currTriangleIndex;
-                                }
-                                else if(i == 2 && d > dd.z)
-                                {
-                                    dd.z = d;
-                                    currents.z = currTriangleIndex;
-                                }
-                                else if(i == 3 && d > dd.w)
-                                {
-                                    dd.w = d;
-                                    currents.w = currTriangleIndex;
-                                }
-                                //if(d > localMins[i])
-                                //{
-                                //    localMins[i] = d;
-                                //    closestTriangleIndexes[i] = currTriangleIndex;
-                                //}
-                            }
-                            u += uChange.y;
-                            v += vChange.y;
-                            d += dChange.y;
-                        }
-                        if(k == 0) { localMins1 = dd; closestTriangleIndexes1 = currents; }
-                        if(k == 1) { localMins2 = dd; closestTriangleIndexes2 = currents; }
-                        if(k == 2) { localMins3 = dd; closestTriangleIndexes3 = currents; }
-                        if(k == 3) { localMins4 = dd; closestTriangleIndexes4 = currents; }
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.x) { dd.x = d; currents.x = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.y) { dd.y = d; currents.y = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.z) { dd.z = d; currents.z = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.w) { dd.w = d; currents.w = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
+
+                        if(k + j == 0) { localMins1 = dd; closestTriangleIndexes1 = currents; }
+                        if(k + j == 1) { localMins2 = dd; closestTriangleIndexes2 = currents; }
+                        if(k + j == 2) { localMins3 = dd; closestTriangleIndexes3 = currents; }
+                        if(k + j == 3) { localMins4 = dd; closestTriangleIndexes4 = currents; }
 
                     }
                 }
@@ -470,6 +420,11 @@ void main()
         memoryBarrierShared();
         barrier();
     }
+    vec2 tileSize = vec2(x_threads, y_threads) * vec2(pixelsPerThreadX, pixelsPerThreadY);
+
+    vec2 topLeft = (vec2(gl_WorkGroupID.xy) * tileSize) + vec2(0.5f);
+    topLeft = (topLeft / screen) * 2.0f - 1.0f;
+
     for(uint j = 0; j < 4; ++j)
     {
         vec4 dd = vec4(0);
@@ -478,6 +433,7 @@ void main()
         if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
         if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
         if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+
 
         for(uint i = 0; i < pixelsPerThread / 4; ++i)
         {
@@ -538,19 +494,12 @@ void main()
                     vec3 v3 = closest3.pos;
                 #endif
 
-                uvec4 c1 = uvec4((closest1.col & 255u), (closest1.col >> 8u) & 255u, (closest1.col >> 16u) & 255u, (closest1.col >> 24u) & 255u);
-                uvec4 c2 = uvec4((closest2.col & 255u), (closest2.col >> 8u) & 255u, (closest2.col >> 16u) & 255u, (closest2.col >> 24u) & 255u);
-                uvec4 c3 = uvec4((closest3.col & 255u), (closest3.col >> 8u) & 255u, (closest3.col >> 16u) & 255u, (closest3.col >> 24u) & 255u);
-                vec4 cc1 = c1 / 255.0f;
-                vec4 cc2 = c2 / 255.0f;
-                vec4 cc3 = c3 / 255.0f;
-
-
-
                 vec3 uChange = vec3(0);
                 vec3 vChange = vec3(0);
                 vec3 dChange = vec3(0);
                 float det = 0.0f;
+
+
                 getUVD(v1, v2, v3, topLeft, screen, uChange, vChange, dChange, det);
 
                 vec3 dotXY = vec3(1.0f, float(threadId % x_threads) * pixelsPerThreadX + x,
@@ -559,11 +508,15 @@ void main()
                 float u = dot(uChange, dotXY);
                 float v = dot(vChange, dotXY);
 
-                vec3 closestWVU = vec3(1.0f - u - v, u, v);
-
+                uvec4 c1 = uvec4((closest1.col & 255u), (closest1.col >> 8u) & 255u, (closest1.col >> 16u) & 255u, (closest1.col >> 24u) & 255u);
+                uvec4 c2 = uvec4((closest2.col & 255u), (closest2.col >> 8u) & 255u, (closest2.col >> 16u) & 255u, (closest2.col >> 24u) & 255u);
+                uvec4 c3 = uvec4((closest3.col & 255u), (closest3.col >> 8u) & 255u, (closest3.col >> 16u) & 255u, (closest3.col >> 24u) & 255u);
+                vec4 cc1 = c1 / 255.0f;
+                vec4 cc2 = c2 / 255.0f;
+                vec4 cc3 = c3 / 255.0f;
 
                 vec4 color = vec4(1.0f);
-                color =  cc1 * closestWVU.x + cc2 * closestWVU.y + cc3 * closestWVU.z;
+                color =  cc1 * (1.0f - u - v) + cc2 * u + cc3 * v;
                 // Visualize depth
                 //color.rgb = vec3(depth * depth);
                 //color.rgb = vec3(depth);
