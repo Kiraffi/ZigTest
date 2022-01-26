@@ -156,7 +156,7 @@ pub fn draw(texture: ogl.Texture) void
 //    c.glMemoryBarrier(c.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 
-const COMPUTE_X_GROUP_SIZE: u32 = 4 * 16 * 1;
+const COMPUTE_X_GROUP_SIZE: u32 = 4 * 4 * 1;
 const COMPUTE_Y_GROUP_SIZE: u32 = 64 * 1 * 1;
 
 pub fn draw2(texture: ogl.Texture) void

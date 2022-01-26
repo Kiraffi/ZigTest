@@ -3,7 +3,10 @@
 #define THREAD_GROUP_SIZE 64
 #define USE_SHARED_VERTICES 1
 
-//#extension GL_KHR_shader_subgroup_arithmetic: enable
+//#extension GL_ARB_shader_group_vote : require
+//#extension GL_KHR_shader_subgroup_basic: require
+//#extension GL_KHR_shader_subgroup_arithmetic: require
+
 #define USE_PROJECTION 0
 
 layout (binding = 0) uniform frame_data
@@ -46,7 +49,7 @@ layout (std430, binding = 4, row_major) restrict readonly buffer instance_data
     mat4 instanceMatrix[];
 };
 
-#define pixelsPerThreadX 16
+#define pixelsPerThreadX 4
 #define pixelsPerThreadY 1
 #define pixelsPerThread (pixelsPerThreadX * pixelsPerThreadY)
 const uint x_threads = 4 * 1;
@@ -109,7 +112,9 @@ void main()
 
     uvec2 startIndex = uvec2((threadId % x_threads) * pixelsPerThreadX, (threadId / x_threads) * pixelsPerThreadY);
 
-
+    #if pixelsPerThread == 1
+        float localMin = 0.0f;
+    #endif
     #if pixelsPerThread >= 4
         vec4 localMins1 = vec4(0.0);
     #endif
@@ -121,6 +126,9 @@ void main()
         vec4 localMins3 = vec4(0.0);
     #endif
 
+    #if pixelsPerThread == 1
+        uint closestTriangleIndex = 0u;
+    #endif
     #if pixelsPerThread >= 4
         uvec4 closestTriangleIndexes1 = uvec4(0u);
     #endif
@@ -145,8 +153,9 @@ void main()
         #elif pixelsPerThread >= 4
             vec4 lt = localMins1;
         #endif
-        float localMin = min(min(lt.x, lt.y), min(lt.z, lt.w));
-
+        #if pixelsPerThread >= 4
+            float localMin = min(min(lt.x, lt.y), min(lt.z, lt.w));
+        #endif
         if(threadId == 0)
         {
             maxDepthShared = floatBitsToUint(localMin);
@@ -381,8 +390,11 @@ void main()
 
 
 
-
+                #if pixelsPerThread == 1
+                    uint j = 0;
+                #else
                 for(uint j = 0; j < pixelsPerThread / 4; ++j)
+                #endif
                 {
                     float yOff = startIndex.y + j / (pixelsPerThreadX / 4);
                     float xOff = startIndex.x + (j % (pixelsPerThreadX / 4)) * 4;
@@ -404,39 +416,45 @@ void main()
 //                        v += vChange.y;
 //                        ds += dChange.y;
 //                    }
-                    vec4 dd = vec4(0);
-                    uvec4 currents = uvec4(0);
+                    #if pixelsPerThread == 1
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > localMin) { localMin = d; closestTriangleIndex = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
 
-                    #if pixelsPerThread >= 16
-                        if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
-                        if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
-                    #endif
-                    #if pixelsPerThread >= 8
-                        if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
-                    #endif
-                    #if pixelsPerThread >= 4
-                        if(j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
-                    #endif
+                    #else
+                        vec4 dd = vec4(0);
+                        uvec4 currents = uvec4(0);
+
+                        #if pixelsPerThread >= 16
+                            if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
+                            if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+                        #endif
+                        #if pixelsPerThread >= 8
+                            if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
+                        #endif
+                        #if pixelsPerThread >= 4
+                            if(j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
+                        #endif
 
 
-                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.x) { dd.x = d; currents.x = currTriangleIndex; }
-                    u += uChange.y; v += vChange.y; d += dChange.y;
-                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.y) { dd.y = d; currents.y = currTriangleIndex; }
-                    u += uChange.y; v += vChange.y; d += dChange.y;
-                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.z) { dd.z = d; currents.z = currTriangleIndex; }
-                    u += uChange.y; v += vChange.y; d += dChange.y;
-                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.w) { dd.w = d; currents.w = currTriangleIndex; }
-                    u += uChange.y; v += vChange.y; d += dChange.y;
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.x) { dd.x = d; currents.x = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.y) { dd.y = d; currents.y = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.z) { dd.z = d; currents.z = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
+                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.w) { dd.w = d; currents.w = currTriangleIndex; }
+                        u += uChange.y; v += vChange.y; d += dChange.y;
 
-                    #if pixelsPerThread >= 4
-                        if(j == 0) { localMins1 = dd; closestTriangleIndexes1 = currents; }
-                    #endif
-                    #if pixelsPerThread >= 8
-                        if(j == 1) { localMins2 = dd; closestTriangleIndexes2 = currents; }
-                    #endif
-                    #if pixelsPerThread >= 16
-                        if(j == 2) { localMins3 = dd; closestTriangleIndexes3 = currents; }
-                        if(j == 3) { localMins4 = dd; closestTriangleIndexes4 = currents; }
+                        #if pixelsPerThread >= 4
+                            if(j == 0) { localMins1 = dd; closestTriangleIndexes1 = currents; }
+                        #endif
+                        #if pixelsPerThread >= 8
+                            if(j == 1) { localMins2 = dd; closestTriangleIndexes2 = currents; }
+                        #endif
+                        #if pixelsPerThread >= 16
+                            if(j == 2) { localMins3 = dd; closestTriangleIndexes3 = currents; }
+                            if(j == 3) { localMins4 = dd; closestTriangleIndexes4 = currents; }
+                        #endif
                     #endif
                 }
             }
@@ -452,36 +470,50 @@ void main()
     vec2 topLeft = (vec2(gl_WorkGroupID.xy) * tileSize) + vec2(0.5f);
     topLeft = (topLeft / screen) * 2.0f - 1.0f;
 
+    #if pixelsPerThread == 1
+        uint j = 0;
+    #else
     for(uint j = 0; j < pixelsPerThread / 4; ++j)
+    #endif
     {
-        vec4 dd = vec4(0);
-        uvec4 currents = uvec4(0);
-        #if pixelsPerThread >= 4
-            if(j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
-        #endif
-        #if pixelsPerThread >= 8
-            if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
-        #endif
-        #if pixelsPerThread >= 16
-            if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
-            if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
-        #endif
+        #if pixelsPerThread == 1
+            uint i = 0;
+        #else
+            vec4 dd = vec4(0);
+            uvec4 currents = uvec4(0);
+            #if pixelsPerThread >= 4
+                if(j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
+            #endif
+            #if pixelsPerThread >= 8
+                if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
+            #endif
+            #if pixelsPerThread >= 16
+                if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
+                if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+            #endif
 
-        for(uint i = 0; i < 4; ++i)
+            for(uint i = 0; i < 4; ++i)
+        #endif
         {
-            uint x = (i + j * 4) % pixelsPerThreadX;
-            uint y = (i + j * 4) / pixelsPerThreadX;
+            #if pixelsPerThread == 1
+                float depth = localMin;
+                uint triangleIndex = closestTriangleIndex;
+                uint x = 0;
+                uint y = 0;
+            #else
+                uint x = (i + j * 4) % pixelsPerThreadX;
+                uint y = (i + j * 4) / pixelsPerThreadX;
 
-            //float depth = localMins[i];
-            //uint triangleIndex = closestTriangleIndexes[i];
+                //float depth = localMins[i];
+                //uint triangleIndex = closestTriangleIndexes[i];
 
-            float depth = 0.0f;
-            uint triangleIndex = 0;
-            if(i == 0) { depth = dd.x; triangleIndex = currents.x; }
-            if(i == 1) { depth = dd.y; triangleIndex = currents.y; }
-            if(i == 2) { depth = dd.z; triangleIndex = currents.z; }
-            if(i == 3) { depth = dd.w; triangleIndex = currents.w; }
-
+                float depth = 0.0f;
+                uint triangleIndex = 0;
+                if(i == 0) { depth = dd.x; triangleIndex = currents.x; }
+                if(i == 1) { depth = dd.y; triangleIndex = currents.y; }
+                if(i == 2) { depth = dd.z; triangleIndex = currents.z; }
+                if(i == 3) { depth = dd.w; triangleIndex = currents.w; }
+            #endif
             if(depth <= 1.0f && depth > 0.0f)
             {
 

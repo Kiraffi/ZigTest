@@ -143,7 +143,7 @@ pub const Engine = struct
             _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_DEBUG_FLAG);
 
         var window = c.SDL_CreateWindow(title.ptr, c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, width, height,
-            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_SHOWN); // | c.SDL_WINDOW_BORDERLESS ); 
+            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_SHOWN); // | c.SDL_WINDOW_BORDERLESS );
         if( window == null)
         {
             panic("SDL window cannot be created. SDL_error: {s}\n", .{ c.SDL_GetError() });
@@ -167,6 +167,8 @@ pub const Engine = struct
         var subGroups: c.GLint = 0;
         c.glGetIntegerv(c.GL_SUBGROUP_SIZE_KHR, &subGroups);
         print("Subgroupsize: {}\n", .{subGroups});
+        c.glGetIntegerv(c.GL_SUBGROUP_SUPPORTED_FEATURES_KHR, &subGroups);
+        print("Subgroup supported features: {}\n", .{subGroups});
         if(useDebug)
         {
             c.glEnable(c.GL_DEBUG_OUTPUT);
