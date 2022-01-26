@@ -46,9 +46,9 @@ layout (std430, binding = 4, row_major) restrict readonly buffer instance_data
     mat4 instanceMatrix[];
 };
 
-const uint pixelsPerThreadX = 16;
-const uint pixelsPerThreadY = 1;
-const uint pixelsPerThread = pixelsPerThreadX * pixelsPerThreadY;
+#define pixelsPerThreadX 16
+#define pixelsPerThreadY 1
+#define pixelsPerThread (pixelsPerThreadX * pixelsPerThreadY)
 const uint x_threads = 4 * 1;
 const uint y_threads = 64 * 1;
 const uint threads = x_threads * y_threads;
@@ -110,16 +110,27 @@ void main()
     uvec2 startIndex = uvec2((threadId % x_threads) * pixelsPerThreadX, (threadId / x_threads) * pixelsPerThreadY);
 
 
+    #if pixelsPerThread >= 4
+        vec4 localMins1 = vec4(0.0);
+    #endif
+    #if pixelsPerThread >= 8
+        vec4 localMins2 = vec4(0.0);
+    #endif
+    #if pixelsPerThread >= 16
+        vec4 localMins4 = vec4(0.0);
+        vec4 localMins3 = vec4(0.0);
+    #endif
 
-    vec4 localMins1 = vec4(0.0);
-    vec4 localMins2 = vec4(0.0);
-    vec4 localMins3 = vec4(0.0);
-    vec4 localMins4 = vec4(0.0);
-
-   uvec4 closestTriangleIndexes1 = uvec4(0u);
-   uvec4 closestTriangleIndexes2 = uvec4(0u);
-   uvec4 closestTriangleIndexes3 = uvec4(0u);
-   uvec4 closestTriangleIndexes4 = uvec4(0u);
+    #if pixelsPerThread >= 4
+        uvec4 closestTriangleIndexes1 = uvec4(0u);
+    #endif
+    #if pixelsPerThread >= 8
+        uvec4 closestTriangleIndexes2 = uvec4(0u);
+    #endif
+    #if pixelsPerThread >= 16
+        uvec4 closestTriangleIndexes3 = uvec4(0u);
+        uvec4 closestTriangleIndexes4 = uvec4(0u);
+    #endif
 
 
     uint blockId = threadId / THREAD_GROUP_SIZE;
@@ -127,7 +138,13 @@ void main()
     uint maxTriangle = 1048576 / (64); // 15 * 64;
     for(uint triangleIndex = 0; triangleIndex < maxTriangle; triangleIndex += threads)
     {
-        vec4 lt = min(min(localMins1, localMins2), min(localMins3, localMins4));
+        #if pixelsPerThread >= 16
+            vec4 lt = min(min(localMins1, localMins2), min(localMins3, localMins4));
+        #elif pixelsPerThread >= 8
+            vec4 lt = min(localMins1, localMins2);
+        #elif pixelsPerThread >= 4
+            vec4 lt = localMins1;
+        #endif
         float localMin = min(min(lt.x, lt.y), min(lt.z, lt.w));
 
         if(threadId == 0)
@@ -365,10 +382,10 @@ void main()
 
 
 
-                float xOff = startIndex.x;
-                for(uint j = 0; j < pixelsPerThreadY; ++j)
+                for(uint j = 0; j < pixelsPerThread / 4; ++j)
                 {
-                    float yOff = startIndex.y + j;
+                    float yOff = startIndex.y + j / (pixelsPerThreadX / 4);
+                    float xOff = startIndex.x + (j % (pixelsPerThreadX / 4)) * 4;
 
                     float u = dot(uChange, vec3(1.0f, xOff, yOff));
                     float v = dot(vChange, vec3(1.0f, xOff, yOff));
@@ -387,30 +404,40 @@ void main()
 //                        v += vChange.y;
 //                        ds += dChange.y;
 //                    }
-                    for(uint k = 0; k < pixelsPerThreadX / 4; ++k)
-                    {
-                        vec4 dd = vec4(0);
-                        uvec4 currents = uvec4(0);
-                        if(k + j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
-                        if(k + j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
-                        if(k + j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
-                        if(k + j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+                    vec4 dd = vec4(0);
+                    uvec4 currents = uvec4(0);
 
-                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.x) { dd.x = d; currents.x = currTriangleIndex; }
-                        u += uChange.y; v += vChange.y; d += dChange.y;
-                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.y) { dd.y = d; currents.y = currTriangleIndex; }
-                        u += uChange.y; v += vChange.y; d += dChange.y;
-                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.z) { dd.z = d; currents.z = currTriangleIndex; }
-                        u += uChange.y; v += vChange.y; d += dChange.y;
-                        if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.w) { dd.w = d; currents.w = currTriangleIndex; }
-                        u += uChange.y; v += vChange.y; d += dChange.y;
+                    #if pixelsPerThread >= 16
+                        if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
+                        if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+                    #endif
+                    #if pixelsPerThread >= 8
+                        if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
+                    #endif
+                    #if pixelsPerThread >= 4
+                        if(j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
+                    #endif
 
-                        if(k + j == 0) { localMins1 = dd; closestTriangleIndexes1 = currents; }
-                        if(k + j == 1) { localMins2 = dd; closestTriangleIndexes2 = currents; }
-                        if(k + j == 2) { localMins3 = dd; closestTriangleIndexes3 = currents; }
-                        if(k + j == 3) { localMins4 = dd; closestTriangleIndexes4 = currents; }
 
-                    }
+                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.x) { dd.x = d; currents.x = currTriangleIndex; }
+                    u += uChange.y; v += vChange.y; d += dChange.y;
+                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.y) { dd.y = d; currents.y = currTriangleIndex; }
+                    u += uChange.y; v += vChange.y; d += dChange.y;
+                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.z) { dd.z = d; currents.z = currTriangleIndex; }
+                    u += uChange.y; v += vChange.y; d += dChange.y;
+                    if(u >= 0.0f && v >= 0.0f && u + v <= 1.0f && d > dd.w) { dd.w = d; currents.w = currTriangleIndex; }
+                    u += uChange.y; v += vChange.y; d += dChange.y;
+
+                    #if pixelsPerThread >= 4
+                        if(j == 0) { localMins1 = dd; closestTriangleIndexes1 = currents; }
+                    #endif
+                    #if pixelsPerThread >= 8
+                        if(j == 1) { localMins2 = dd; closestTriangleIndexes2 = currents; }
+                    #endif
+                    #if pixelsPerThread >= 16
+                        if(j == 2) { localMins3 = dd; closestTriangleIndexes3 = currents; }
+                        if(j == 3) { localMins4 = dd; closestTriangleIndexes4 = currents; }
+                    #endif
                 }
             }
 
@@ -425,17 +452,22 @@ void main()
     vec2 topLeft = (vec2(gl_WorkGroupID.xy) * tileSize) + vec2(0.5f);
     topLeft = (topLeft / screen) * 2.0f - 1.0f;
 
-    for(uint j = 0; j < 4; ++j)
+    for(uint j = 0; j < pixelsPerThread / 4; ++j)
     {
         vec4 dd = vec4(0);
         uvec4 currents = uvec4(0);
-        if(j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
-        if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
-        if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
-        if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+        #if pixelsPerThread >= 4
+            if(j == 0) { dd = localMins1; currents = closestTriangleIndexes1; }
+        #endif
+        #if pixelsPerThread >= 8
+            if(j == 1) { dd = localMins2; currents = closestTriangleIndexes2; }
+        #endif
+        #if pixelsPerThread >= 16
+            if(j == 2) { dd = localMins3; currents = closestTriangleIndexes3; }
+            if(j == 3) { dd = localMins4; currents = closestTriangleIndexes4; }
+        #endif
 
-
-        for(uint i = 0; i < pixelsPerThread / 4; ++i)
+        for(uint i = 0; i < 4; ++i)
         {
             uint x = (i + j * 4) % pixelsPerThreadX;
             uint y = (i + j * 4) / pixelsPerThreadX;
