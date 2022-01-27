@@ -24,8 +24,10 @@ fn buildTarget(b: *std.build.Builder, name: []const u8, zigFile: []const u8,
         exe.addLibPath("libs");
         b.installBinFile("libs\\SDL2.dll", "SDL2.dll");
     }
-
-
+    else
+    {
+        exe.linkSystemLibrary("vulkan");
+    }
     exe.linkSystemLibrary("sdl2");
     exe.linkLibC();
     exe.install();
@@ -72,7 +74,9 @@ pub fn build(b: *std.build.Builder) void
 
 
     //buildTarget(b, "zigtetris", "src/tetris.zig", target, mode, true, false);
-    buildTarget(b, "zigmain", "src/main.zig", target, mode, true, false);
+    //buildTarget(b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false);
+    //buildTarget(b, "zigmain", "src/main.zig", target, mode, true, false);
 
+    buildTarget(b, "zigmain", "src/main_vulkan_test.zig", target, mode, true, false);
 
 }
