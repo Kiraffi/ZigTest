@@ -31,11 +31,17 @@ var window: ?*c.SDL_Window = null;
 var currentFrame: usize = 0;
 var instance: c.VkInstance = undefined;
 var callback: c.VkDebugReportCallbackEXT = c.VK_NULL_HANDLE; // NEEDED?
-var surface: c.VkSurfaceKHR = c.VK_NULL_HANDLE;
-var physicalDevice: c.VkPhysicalDevice = c.VK_NULL_HANDLE;
-var globalDevice: c.VkDevice = c.VK_NULL_HANDLE;
-var graphicsQueue: c.VkQueue = c.VK_NULL_HANDLE;
-var presentQueue: c.VkQueue = c.VK_NULL_HANDLE;
+var surface: c.VkSurfaceKHR = null;
+var physicalDevice: c.VkPhysicalDevice = null; // Is this needed?
+var logicalDevice: c.VkDevice = null;
+
+var graphicsQueue: c.VkQueue = null;
+var presentQueue: c.VkQueue = null;
+var computeQueue: c.VkQueue = null;
+var transferQueue: c.VkQueue = null;
+var uniqueQueues: u32 = 0;
+
+
 var swapChainImages: []c.VkImage = undefined;
 var swapChain: c.VkSwapchainKHR = c.VK_NULL_HANDLE;
 var swapChainImageFormat: c.VkFormat = c.VK_NULL_HANDLE;
@@ -191,12 +197,16 @@ pub fn main() anyerror!void
     defer c.vkDestroyInstance(instance, null);
 
 
-
-
-
-
+    // Create surface!
+    if (c.SDL_Vulkan_CreateSurface(window, instance, &surface) != c.SDL_TRUE)
     {
+        print("Failed to create surface\n", .{});
+        return error.FailedToSDLVulkanCreateSurface;
+    }
+    defer c.vkDestroySurfaceKHR(instance, surface, null);
 
+    // Pick physical device!
+    {
         var deviceCount: u32 = 0;
         try(checkSuccess(c.vkEnumeratePhysicalDevices(instance, &deviceCount, null)));
         if(deviceCount == 0)
@@ -218,7 +228,6 @@ pub fn main() anyerror!void
             var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
             c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
             c.vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
             if(deviceProperties.deviceType == c.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
             {
                 print("Discrete gpu: {s}\n", .{deviceProperties.deviceName});
@@ -227,6 +236,61 @@ pub fn main() anyerror!void
             {
                 print("Integrated gpu: {s}\n", .{deviceProperties.deviceName});
             }
+            print("Device features: {}\n", .{deviceFeatures});
+            if(deviceFeatures.shaderInt64 != 0)
+            {
+                print("Supports shaderint64\n", .{});
+            }
+
+            if(deviceFeatures.geometryShader == 0)
+            {
+                print("No geometry shader supported\n\n", .{});
+                continue;
+            }
+
+            // Check device extensions
+            if(deviceExtensions.len > 0)
+            {
+                var availableDeviceExtensionCount: u32 = 0;
+                if(c.vkEnumerateDeviceExtensionProperties(device, null, &availableDeviceExtensionCount, null) != c.VK_SUCCESS)
+                {
+                    print("Failed to enumerate device extensions.\n\n", .{});
+                    continue;
+                }
+
+                const availableDeviceExtensions = try allocator.alloc(c.VkExtensionProperties, availableDeviceExtensionCount);
+                defer allocator.free(availableDeviceExtensions);
+
+                if(c.vkEnumerateDeviceExtensionProperties(device, null, &availableDeviceExtensionCount, availableDeviceExtensions.ptr)  != c.VK_SUCCESS)
+                {
+                    print("Failed to enumerate device extensions.\n\n", .{});
+                    continue;
+                }
+
+                var foundAllExtensions = true;
+                for(deviceExtensions) |ext|
+                {
+                    var index: u32 = 0;
+                    while(index < availableDeviceExtensionCount) : (index += 1)
+                    {
+                        if (std.cstr.cmp(ext, @ptrCast([*:0]const u8, &availableDeviceExtensions[index].extensionName)) == 0) 
+                        {
+                            break;
+                        }
+                    }
+                    if(index == availableDeviceExtensionCount)
+                    {
+                        print("Cannot find extension: {s}\n", .{ext});
+                        foundAllExtensions = false;
+                    }
+                }
+                if(!foundAllExtensions)
+                {
+                    print("Device was missing some extension\n\n", .{});
+                    continue;
+                }
+            }
+
 
             var subgroupProperties = c.VkPhysicalDeviceSubgroupProperties {
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
@@ -246,8 +310,106 @@ pub fn main() anyerror!void
 
             print("Subgroup size: {}\n", .{subgroupProperties.subgroupSize});
             print("Subgroup operations: {}\n\n", .{subgroupProperties.supportedOperations});
+            if(subgroupProperties.subgroupSize < 16 or subgroupProperties.supportedOperations == 0)
+            {
+                print("Cannot use subgroup operations, or group size is less than 16.\n", .{});
+                continue;
+            }
+
+
+
+            var queueFamilyCount: u32 = 0;
+            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, null);
+
+            const queues = try allocator.alloc(c.VkQueueFamilyProperties, queueFamilyCount);
+            defer allocator.free(queues);
+            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queues.ptr);
+
+            var j: u32 = 0;
+            var graphicsIndex: u32 = ~@as(u32, 0);
+            var transferIndex: u32 = ~@as(u32, 0);
+            var computeIndex: u32 = ~@as(u32, 0);
+            var presentIndex: u32 = ~@as(u32, 0);
+
+            while(j < queueFamilyCount) : (j += 1)
+            {
+                // Probably bad to force all queues to work in same index.
+                const bits = c.VK_QUEUE_GRAPHICS_BIT | c.VK_QUEUE_COMPUTE_BIT | c.VK_QUEUE_TRANSFER_BIT;
+                const flags = queues[j].queueFlags;
+                print("flags for family: {}\n", .{flags});
+                if((queues[j].queueFlags & bits) != bits)
+                {
+                    continue;
+                }
+
+                var presentSupport: c.VkBool32 = 0;
+                if(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, j, surface, &presentSupport) != c.VK_SUCCESS)
+                {
+                    print("Failed to get device surface support\n", .{});
+                    continue;
+                }
+
+                if (presentSupport == 0)
+                    continue;
+
+                graphicsIndex = j;
+                transferIndex = j;
+                computeIndex = j;
+                presentIndex = j;
+                break;
+            }
+
+            if(graphicsIndex == ~@as(u32, 0) or transferIndex == ~@as(u32, 0) or computeIndex == ~@as(u32, 0) or presentIndex ==~@as(u32, 0) )
+            {
+                print("Doesn't support needed queues.\n", .{});
+                continue;
+            }
+
+            const queuePriority: f32 = 1.0;
+            var queueCreateInfo = c.VkDeviceQueueCreateInfo {
+                .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = graphicsIndex,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority,
+                .flags = 0,
+                .pNext = null,
+            };
+            
+            var  deviceCreateInfo = c.VkDeviceCreateInfo {
+                .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+                .pQueueCreateInfos = &queueCreateInfo,
+                .queueCreateInfoCount = 1,
+                .pEnabledFeatures = &deviceFeatures,
+                .enabledLayerCount = if(enableValidationLayers) validationLayers.len else 0,
+                .ppEnabledLayerNames = if(enableValidationLayers) &validationLayers else null,
+                .enabledExtensionCount = deviceExtensions.len,
+                .ppEnabledExtensionNames = &deviceExtensions,
+                .flags = 0,
+                .pNext = null
+            };
+            var tmpDevice: c.VkDevice = undefined;
+            if (c.vkCreateDevice(device, &deviceCreateInfo, null, &tmpDevice) != c.VK_SUCCESS) 
+            {
+                print("Failed to create logical device.\n", .{});
+                continue;
+            }
+            physicalDevice = device;
+            logicalDevice = tmpDevice;
+            c.vkGetDeviceQueue(logicalDevice, presentIndex, 0, &presentQueue);
+            c.vkGetDeviceQueue(logicalDevice, graphicsIndex, 0, &graphicsQueue);
+            c.vkGetDeviceQueue(logicalDevice, computeIndex, 0, &computeQueue);
+            c.vkGetDeviceQueue(logicalDevice, transferIndex, 0, &transferQueue);
+            
+            break;
+        }
+
+        if(logicalDevice == null)
+        {
+            print("Failed to find working logical device.\n", .{});
+            return error.PhysicalDeviceNotFound;
         }
     }
+    defer c.vkDestroyDevice(logicalDevice, null);
 }
 
 
