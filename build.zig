@@ -66,10 +66,10 @@ pub fn build(b: *std.build.Builder) !void
 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
-
     const allocator = arena.allocator();
-    const sdkPath = try std.process.getEnvVarOwned(allocator, "VULKAN_SDK");
-    std.debug.print("Vulkan path: {s}\n", .{sdkPath});
+
+    var sdkPath: []const u8 = undefined;
+
 
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -82,6 +82,11 @@ pub fn build(b: *std.build.Builder) !void
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
+    if (target.isWindows())
+    {
+        sdkPath = try std.process.getEnvVarOwned(allocator, "VULKAN_SDK");
+        std.debug.print("Vulkan path: {s}\n", .{sdkPath});
+    }
 
     //buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, false, false);
     //buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, false, false);
