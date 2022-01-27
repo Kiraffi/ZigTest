@@ -2,7 +2,7 @@ const std = @import("std");
 
 
 
-fn buildTarget(b: *std.build.Builder, name: []const u8, zigFile: []const u8,
+fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zigFile: []const u8,
     target: std.zig.CrossTarget, mode: std.builtin.Mode, runnable: bool, testable: bool) void
 {
     // to keep this debuggale from vscode without having to figure out some way to push the launch.json
@@ -20,9 +20,16 @@ fn buildTarget(b: *std.build.Builder, name: []const u8, zigFile: []const u8,
     exe.setBuildMode(mode);
     if (exe.target.isWindows())
     {
+        var sdkIncludePath = std.mem.zeroes([1024]u8);
+        std.mem.copy(u8, &sdkIncludePath, sdkPath);
+        const inc = "/Include";
+        std.mem.copy(u8, sdkIncludePath[sdkPath.len..], inc);
+
+        exe.addIncludeDir(sdkIncludePath[0..sdkPath.len + inc.len]);
         exe.addIncludeDir("deps/include/SDL");
         exe.addLibPath("libs");
-        b.installBinFile("libs\\SDL2.dll", "SDL2.dll");
+        b.installBinFile("libs/SDL2.dll", "SDL2.dll");
+        exe.linkSystemLibrary("vulkan-1");
     }
     else
     {
@@ -55,8 +62,15 @@ fn buildTarget(b: *std.build.Builder, name: []const u8, zigFile: []const u8,
 
 
 
-pub fn build(b: *std.build.Builder) void
+pub fn build(b: *std.build.Builder) !void
 {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+    const sdkPath = try std.process.getEnvVarOwned(allocator, "VULKAN_SDK");
+    std.debug.print("Vulkan path: {s}\n", .{sdkPath});
+
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -69,14 +83,14 @@ pub fn build(b: *std.build.Builder) void
     const mode = b.standardReleaseOptions();
 
 
-    //buildTarget(b, "zigmain", "src/main.zig", target, mode, false, false);
-    //buildTarget(b, "zigtetris", "src/tetris.zig", target, mode, false, false);
+    //buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, false, false);
+    //buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, false, false);
 
 
-    //buildTarget(b, "zigtetris", "src/tetris.zig", target, mode, true, false);
-    //buildTarget(b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false);
-    //buildTarget(b, "zigmain", "src/main.zig", target, mode, true, false);
+    //buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, true, false);
+    //buildTarget(sdkPath, b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false);
+    //buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, true, false);
 
-    buildTarget(b, "zigmain", "src/main_vulkan_test.zig", target, mode, true, false);
+    buildTarget(sdkPath, b, "zigmain", "src/main_vulkan_test.zig", target, mode, true, false);
 
 }
