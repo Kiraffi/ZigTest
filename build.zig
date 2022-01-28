@@ -92,13 +92,13 @@ pub fn build(b: *std.build.Builder) anyerror!void
         std.debug.print("Vulkan path: {s}\n", .{sdkPath});
     }
 
-    //buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, false, false);
-    //buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, false, false);
+    //try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, false, false));
+    //try(buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, false, false));
 
 
-    //buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, true, false);
-    //buildTarget(sdkPath, b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false);
-    //buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, true, false);
+    //try(buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, true, false));
+    //try(buildTarget(sdkPath, b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false));
+    //try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, true, false));
 
     try(buildTarget(sdkPath, b, "zigmain", "src/main_vulkan_test.zig", target, mode, true, false));
 

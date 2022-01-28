@@ -22,7 +22,7 @@ const HEIGHT = 600;
 
 const MAX_FRAMES_IN_FLIGHT = 2;
 
-const enableValidationLayers = false; //std.debug.runtime_safety;
+const enableValidationLayers = std.debug.runtime_safety;
 const validationLayers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const deviceExtensions = [_][*:0]const u8{c.VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
@@ -48,7 +48,6 @@ var window: ?*c.SDL_Window = null;
 
 var currentFrame: usize = 0;
 var instance: c.VkInstance = undefined;
-//var callback: c.VkDebugReportCallbackEXT = null; // NEEDED?
 var surface: c.VkSurfaceKHR = null;
 var physicalDevice: c.VkPhysicalDevice = null; // Is this needed?
 var logicalDevice: c.VkDevice = null;
@@ -57,6 +56,12 @@ var graphicsQueue: c.VkQueue = null;
 var presentQueue: c.VkQueue = null;
 var computeQueue: c.VkQueue = null;
 var transferQueue: c.VkQueue = null;
+
+var graphicsIndex: u32 = ~@as(u32, 0);
+var transferIndex: u32 = ~@as(u32, 0);
+var computeIndex: u32 = ~@as(u32, 0);
+var presentIndex: u32 = ~@as(u32, 0);
+
 //var uniqueQueues: u32 = 0;
 
 
@@ -71,10 +76,12 @@ var commandPool: c.VkCommandPool = null;
 var commandBuffers: []c.VkCommandBuffer = undefined;
 
 var debugMessenger: c.VkDebugUtilsMessengerEXT = null;
+//var callback: c.VkDebugReportCallbackEXT = null; // old one NEEDED?
 
 var imageAvailableSemaphores: [MAX_FRAMES_IN_FLIGHT]c.VkSemaphore = undefined;
 var renderFinishedSemaphores: [MAX_FRAMES_IN_FLIGHT]c.VkSemaphore = undefined;
 var inFlightFences: [MAX_FRAMES_IN_FLIGHT]c.VkFence = undefined;
+
 
 fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, messageType: c.VkDebugUtilsMessageTypeFlagsEXT,
     pCallbackData: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, pUserData: ?*anyopaque) callconv(.C) c.VkBool32
@@ -90,47 +97,55 @@ fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, mess
     return c.VK_FALSE;
 }
 
+
 pub fn deinit(allocator : std.mem.Allocator) void
 {
     var i: usize = 0;
-    while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+    while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1)
+    {
         c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], null);
         c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], null);
         c.vkDestroyFence(logicalDevice, inFlightFences[i], null);
     }
 
     c.vkDestroyCommandPool(logicalDevice, commandPool, null);
+    allocator.free(commandBuffers);
 
-    for (swapChainFramebuffers) |framebuffer| {
+
+
+    for (swapChainFramebuffers) |framebuffer|
+    {
         c.vkDestroyFramebuffer(logicalDevice, framebuffer, null);
     }
-
-
-    allocator.free(swapChainImages);
+    allocator.free(swapChainFramebuffers);
 
     for (swapChainImageViews) |imageView|
     {
         c.vkDestroyImageView(logicalDevice, imageView, null);
     }
-
-
+    allocator.free(swapChainImages);
     allocator.free(swapChainImageViews);
+
+    c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
+    c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
+
+    c.vkDestroyRenderPass(logicalDevice, renderPass, null);
+
+    c.vkDestroySwapchainKHR(logicalDevice, swapChain, null);
+
+    c.vkDestroyDevice(logicalDevice, null);
+
     if(enableValidationLayers)
-        DestroyDebugReportCallbackEXT(null);
-    
-}
-fn DestroyDebugReportCallbackEXT(pAllocator: ?*const c.VkAllocationCallbacks) void 
-{
-    const func = @ptrCast(c.PFN_vkDestroyDebugUtilsMessengerEXT, c.vkGetInstanceProcAddr(
-        instance, "vkDestroyDebugUtilsMessengerEXT")) orelse unreachable;
-    func(instance, debugMessenger, pAllocator);
-}
-fn CreateDebugReportCallbackEXT(pCreateInfo: *const c.VkDebugUtilsMessengerCreateInfoEXT,
-    pAllocator: ?*const c.VkAllocationCallbacks, pCallback: *c.VkDebugUtilsMessengerEXT) c.VkResult
-{
-    const func = @ptrCast(c.PFN_vkCreateDebugUtilsMessengerEXT, c.vkGetInstanceProcAddr(
-        instance, "vkCreateDebugUtilsMessengerEXT")) orelse return c.VK_ERROR_EXTENSION_NOT_PRESENT;
-    return func(instance, pCreateInfo, pAllocator, pCallback);
+    {
+        const func = @ptrCast(c.PFN_vkDestroyDebugUtilsMessengerEXT, c.vkGetInstanceProcAddr(
+            instance, "vkDestroyDebugUtilsMessengerEXT")) orelse unreachable;
+        func(instance, debugMessenger, null);
+    }
+
+    c.vkDestroySurfaceKHR(instance, surface, null);
+    c.vkDestroyInstance(instance, null);
+    c.SDL_DestroyWindow(window);
+    c.SDL_Quit();
 }
 
 pub fn main() anyerror!void
@@ -142,19 +157,17 @@ pub fn main() anyerror!void
     defer deinit(allocator);
 
     _ = c.SDL_Init(c.SDL_INIT_VIDEO);
-    defer c.SDL_Quit();
-    if(c.SDL_Vulkan_LoadLibrary(null) != 0)
-    {
-        print("Failed to load vulkan library with sdlk\n", .{});
-        return error.FailedToLoadVulkanLibrary;
-    }
-    defer c.SDL_Vulkan_UnloadLibrary();
+    //if(c.SDL_Vulkan_LoadLibrary(null) != 0)
+    //{
+    //    print("Failed to load vulkan library with sdlk\n", .{});
+    //    return error.FailedToLoadVulkanLibrary;
+    //}
+    //defer c.SDL_Vulkan_UnloadLibrary();
 
-    window = c.SDL_CreateWindow("SDL vulkan zig test", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_SHOWN);
-    defer c.SDL_DestroyWindow(window);
+    window = c.SDL_CreateWindow("SDL vulkan zig test",
+        c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, c.SDL_WINDOW_VULKAN);// | c.SDL_WINDOW_SHOWN);
 
     try(createInstance(allocator));
-    defer c.vkDestroyInstance(instance, null);
 
 
     // Create surface!
@@ -163,41 +176,45 @@ pub fn main() anyerror!void
         print("Failed to create surface\n", .{});
         return error.FailedToSDLVulkanCreateSurface;
     }
-    defer c.vkDestroySurfaceKHR(instance, surface, null);
 
 
 
     try(pickPhysicalDevice(allocator));
-    defer c.vkDestroyDevice(logicalDevice, null);
 
     try(createSwapchain(allocator));
-    c.vkDestroySwapchainKHR(logicalDevice, swapChain, null);
 
     try(createRenderPass());
-    defer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
 
-    try(createGraphicsPipeline(allocator));
-    defer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
-    defer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
+    try(createGraphicsPipeline());
 
 
     try createFramebuffers(allocator);
-    try createCommandPool(allocator);
+    try createCommandPool();
     try createCommandBuffers(allocator);
     try createSyncObjects();
 
-    var ev: c.SDL_Event = undefined;
-    while (c.SDL_PollEvent(&ev) != 0)
+
+    var running = true;
+    while(running)
     {
+        var ev: c.SDL_Event = undefined;
+        while (c.SDL_PollEvent(&ev) != 0)
+        {
+            switch (ev.type)
+            {
+                c.SDL_QUIT => running = false,
+                else => {}
+            }
+        }
         try drawFrame();
         c.SDL_Delay(10);
     }
-
     try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
 
 }
 
-fn drawFrame() !void {
+fn drawFrame() !void
+{
     try checkSuccess(c.vkWaitForFences(logicalDevice, 1, @as(*[1]c.VkFence, &inFlightFences[currentFrame]), c.VK_TRUE, std.math.maxInt(u64)));
     try checkSuccess(c.vkResetFences(logicalDevice, 1, @as(*[1]c.VkFence, &inFlightFences[currentFrame])));
 
@@ -249,11 +266,9 @@ fn drawFrame() !void {
 fn createFramebuffers(allocator: std.mem.Allocator) !void
 {
     swapChainFramebuffers = try allocator.alloc(c.VkFramebuffer, swapChainImageViews.len);
-    print("swap len: {}\n", .{swapChainImageViews.len});
-    for (swapChainImageViews) |swap_chain_image_view, i| 
+    for (swapChainImageViews) | swapchainImageview, i |
     {
-        _ = swap_chain_image_view;
-        const attachments = [_]c.VkImageView{ swap_chain_image_view };
+        const attachments = [_]c.VkImageView{ swapchainImageview };
 
         const framebufferInfo = c.VkFramebufferCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -267,21 +282,16 @@ fn createFramebuffers(allocator: std.mem.Allocator) !void
             .pNext = null,
             .flags = 0,
         };
-        print("framebufferInfo: {}\n", .{framebufferInfo});
+
         try checkSuccess(c.vkCreateFramebuffer(logicalDevice, &framebufferInfo, null, &swapChainFramebuffers[i]));
-        print("framebufferInfo after: {}\n", .{framebufferInfo});
     }
 }
 
-fn createCommandPool(allocator: std.mem.Allocator) !void
+fn createCommandPool() !void
 {
-    _ = allocator;
-    //const queueFamilyIndices = try findQueueFamilies(allocator, physicalDevice);
-
-    const poolInfo = c.VkCommandPoolCreateInfo{
+    const poolInfo = c.VkCommandPoolCreateInfo {
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .queueFamilyIndex = 0, // queueFamilyIndices.graphicsFamily.?,
-
+        .queueFamilyIndex = graphicsIndex,
         .pNext = null,
         .flags = 0,
     };
@@ -289,7 +299,8 @@ fn createCommandPool(allocator: std.mem.Allocator) !void
     try checkSuccess(c.vkCreateCommandPool(logicalDevice, &poolInfo, null, &commandPool));
 }
 
-fn createCommandBuffers(allocator: std.mem.Allocator) !void {
+fn createCommandBuffers(allocator: std.mem.Allocator) !void
+{
     commandBuffers = try allocator.alloc(c.VkCommandBuffer, swapChainFramebuffers.len);
 
     const allocInfo = c.VkCommandBufferAllocateInfo{
@@ -341,21 +352,23 @@ fn createCommandBuffers(allocator: std.mem.Allocator) !void {
     }
 }
 
-fn createSyncObjects() !void {
-    const semaphoreInfo = c.VkSemaphoreCreateInfo{
+fn createSyncObjects() !void
+{
+    const semaphoreInfo = c.VkSemaphoreCreateInfo {
         .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = null,
         .flags = 0,
     };
 
-    const fenceInfo = c.VkFenceCreateInfo{
+    const fenceInfo = c.VkFenceCreateInfo {
         .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
         .pNext = null,
     };
 
     var i: usize = 0;
-    while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+    while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1)
+    {
         try checkSuccess(c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]));
         try checkSuccess(c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]));
         try checkSuccess(c.vkCreateFence(logicalDevice, &fenceInfo, null, &inFlightFences[i]));
@@ -418,12 +431,11 @@ fn createRenderPass() anyerror !void
         .pNext = null,
         .flags = 0,
     };
-    print("renderpass: {}", .{renderPass});
     try checkSuccess(c.vkCreateRenderPass(logicalDevice, &renderPassInfo, null, &renderPass));
-    print("renderpass: {}", .{renderPass});
 }
 
-fn createShaderModule(code: []align(@alignOf(u32)) const u8) !c.VkShaderModule {
+fn createShaderModule(code: []align(@alignOf(u32)) const u8) !c.VkShaderModule
+{
     const createInfo = c.VkShaderModuleCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = code.len,
@@ -439,8 +451,8 @@ fn createShaderModule(code: []align(@alignOf(u32)) const u8) !c.VkShaderModule {
     return shaderModule;
 }
 
-fn createGraphicsPipeline(allocator: std.mem.Allocator) !void {
-    _ = allocator;
+fn createGraphicsPipeline() !void
+{
     const vertShaderCode align(4) = @embedFile("../data/shader/vert.spv").*;
     const fragShaderCode align(4) = @embedFile("../data/shader/frag.spv").*;
 
@@ -498,7 +510,7 @@ fn createGraphicsPipeline(allocator: std.mem.Allocator) !void {
         .minDepth = 0.0,
         .maxDepth = 1.0,
     }};
-// dynamic size
+// dynamic state
     const scissor = [_]c.VkRect2D{c.VkRect2D{
         .offset = c.VkOffset2D{ .x = 0, .y = 0 },
         .extent = swapchainImageSize,
@@ -647,27 +659,32 @@ fn createInstance(allocator: std.mem.Allocator) anyerror!void
     }
 
     var sdlExtensionCount: u32 = 0;
+
     if(c.SDL_Vulkan_GetInstanceExtensions(window, &sdlExtensionCount, null) == 0)
         return error.NoSDLExtensions;
 
-    const sdlExtensions = try allocator.alloc([*c]const u8, if(enableValidationLayers) sdlExtensionCount + 1 else sdlExtensionCount);
+    const sdlExtensions = try allocator.alloc([*c]const u8, sdlExtensionCount);
     defer allocator.free(sdlExtensions);
 
     if(c.SDL_Vulkan_GetInstanceExtensions(window, &sdlExtensionCount, sdlExtensions.ptr) == 0)
         return error.NoSDLExtensions;
 
-    if(enableValidationLayers)
-    {
-        sdlExtensionCount += 1;
-        sdlExtensions[sdlExtensionCount - 1] = c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-    }
+    var extensions = std.ArrayList([*c]const u8).init(allocator);
+    errdefer extensions.deinit();
 
+    try extensions.appendSlice(sdlExtensions[0..sdlExtensionCount]);
+    if (enableValidationLayers)
+    {
+        try extensions.append(c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME); //VK_EXT_DEBUG_REPORT_EXTENSION_NAME old
+    }
+    const neededExtension = extensions.toOwnedSlice();
+    defer allocator.free(neededExtension);
 
     {
         var i: u32 = 0;
-        while(i < sdlExtensionCount) : (i += 1)
+        while(i < neededExtension.len) : (i += 1)
         {
-            print("SDL - {}/{}, ext: {s}\n", .{i + 1, sdlExtensionCount, sdlExtensions[i]});
+            print("SDL - {}/{}, ext: {s}\n", .{i + 1, neededExtension.len, neededExtension[i]});
         }
     }
 
@@ -708,13 +725,14 @@ fn createInstance(allocator: std.mem.Allocator) anyerror!void
         .flags = 0,
         .pNext = null
     };
+    _ = debugUtilMessengerCreateInfo;
 
     var createInfo = c.VkInstanceCreateInfo {
         .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &appInfo,
         .flags = 0,
-        .enabledExtensionCount = sdlExtensionCount,
-        .ppEnabledExtensionNames = sdlExtensions.ptr,
+        .enabledExtensionCount = @intCast(u32, neededExtension.len),
+        .ppEnabledExtensionNames = neededExtension.ptr,
         .enabledLayerCount = if(enableValidationLayers) validationLayers.len else 0,
         .ppEnabledLayerNames = if(enableValidationLayers) &validationLayers else null,
         .pNext = if(enableValidationLayers) &debugUtilMessengerCreateInfo else null,
@@ -724,7 +742,10 @@ fn createInstance(allocator: std.mem.Allocator) anyerror!void
 
     if(enableValidationLayers)
     {
-        try checkSuccess(CreateDebugReportCallbackEXT(&debugUtilMessengerCreateInfo, null, &debugMessenger));
+        const func = @ptrCast(c.PFN_vkCreateDebugUtilsMessengerEXT,
+            c.vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT")) orelse return error.NoDebugUtilExtension;
+
+        try checkSuccess(func(instance, &debugUtilMessengerCreateInfo, null, &debugMessenger));
     }
 }
 
@@ -759,6 +780,7 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
         {
             print("Integrated gpu: {s}\n", .{deviceProperties.deviceName});
         }
+
         print("Device features: {}\n", .{deviceFeatures});
         if(deviceFeatures.shaderInt64 != 0)
         {
@@ -872,10 +894,11 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
         c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queues.ptr);
 
         var j: u32 = 0;
-        var graphicsIndex: u32 = ~@as(u32, 0);
-        var transferIndex: u32 = ~@as(u32, 0);
-        var computeIndex: u32 = ~@as(u32, 0);
-        var presentIndex: u32 = ~@as(u32, 0);
+
+        graphicsIndex = ~@as(u32, 0);
+        transferIndex = ~@as(u32, 0);
+        computeIndex = ~@as(u32, 0);
+        presentIndex = ~@as(u32, 0);
 
         while(j < queueFamilyCount) : (j += 1)
         {
@@ -895,7 +918,7 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
                 continue;
             }
 
-            if (presentSupport == 0)
+            if (presentSupport == c.VK_FALSE)
                 continue;
 
             graphicsIndex = j;
@@ -910,10 +933,8 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
             print("Doesn't support needed queues.\n", .{});
             continue;
         }
-
-
         const queuePriority: f32 = 1.0;
-        var queueCreateInfo = c.VkDeviceQueueCreateInfo {
+        const queueCreateInfo = c.VkDeviceQueueCreateInfo {
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .queueFamilyIndex = graphicsIndex,
             .queueCount = 1,
@@ -922,31 +943,94 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
             .pNext = null,
         };
 
-        var  deviceCreateInfo = c.VkDeviceCreateInfo {
+        const queueInfos = [1]c.VkDeviceQueueCreateInfo { queueCreateInfo };
+
+        const requestedFeatures = c.VkPhysicalDeviceFeatures{
+            .robustBufferAccess = 0,
+            .fullDrawIndexUint32 = 0,
+            .imageCubeArray = 0,
+            .independentBlend = 0,
+            .geometryShader = 0,
+            .tessellationShader = 0,
+            .sampleRateShading = 0,
+            .dualSrcBlend = 0,
+            .logicOp = 0,
+            .multiDrawIndirect = 0,
+            .drawIndirectFirstInstance = 0,
+            .depthClamp = 0,
+            .depthBiasClamp = 0,
+            .fillModeNonSolid = 0,
+            .depthBounds = 0,
+            .wideLines = 0,
+            .largePoints = 0,
+            .alphaToOne = 0,
+            .multiViewport = 0,
+            .samplerAnisotropy = 0,
+            .textureCompressionETC2 = 0,
+            .textureCompressionASTC_LDR = 0,
+            .textureCompressionBC = 0,
+            .occlusionQueryPrecise = 0,
+            .pipelineStatisticsQuery = 0,
+            .vertexPipelineStoresAndAtomics = 0,
+            .fragmentStoresAndAtomics = 0,
+            .shaderTessellationAndGeometryPointSize = 0,
+            .shaderImageGatherExtended = 0,
+            .shaderStorageImageExtendedFormats = 0,
+            .shaderStorageImageMultisample = 0,
+            .shaderStorageImageReadWithoutFormat = 0,
+            .shaderStorageImageWriteWithoutFormat = 0,
+            .shaderUniformBufferArrayDynamicIndexing = 0,
+            .shaderSampledImageArrayDynamicIndexing = 0,
+            .shaderStorageBufferArrayDynamicIndexing = 0,
+            .shaderStorageImageArrayDynamicIndexing = 0,
+            .shaderClipDistance = 0,
+            .shaderCullDistance = 0,
+            .shaderFloat64 = 0,
+            .shaderInt64 = 0,
+            .shaderInt16 = 0,
+            .shaderResourceResidency = 0,
+            .shaderResourceMinLod = 0,
+            .sparseBinding = 0,
+            .sparseResidencyBuffer = 0,
+            .sparseResidencyImage2D = 0,
+            .sparseResidencyImage3D = 0,
+            .sparseResidency2Samples = 0,
+            .sparseResidency4Samples = 0,
+            .sparseResidency8Samples = 0,
+            .sparseResidency16Samples = 0,
+            .sparseResidencyAliased = 0,
+            .variableMultisampleRate = 0,
+            .inheritedQueries = 0,
+        };
+
+        const deviceCreateInfo = c.VkDeviceCreateInfo {
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pQueueCreateInfos = &queueCreateInfo,
+
+            .pQueueCreateInfos = &queueInfos,
             .queueCreateInfoCount = 1,
-            .pEnabledFeatures = &deviceFeatures,
+            .pEnabledFeatures = &requestedFeatures,
+
             .enabledLayerCount = if(enableValidationLayers) validationLayers.len else 0,
             .ppEnabledLayerNames = if(enableValidationLayers) &validationLayers else null,
+
             .enabledExtensionCount = deviceExtensions.len,
             .ppEnabledExtensionNames = &deviceExtensions,
+
             .flags = 0,
             .pNext = null
         };
-        var tmpDevice: c.VkDevice = undefined;
-        if (c.vkCreateDevice(device, &deviceCreateInfo, null, &tmpDevice) != c.VK_SUCCESS)
+        if (c.vkCreateDevice(device, &deviceCreateInfo, null, &logicalDevice) != c.VK_SUCCESS)
         {
             print("Failed to create logical device.\n", .{});
             continue;
         }
+
         physicalDevice = device;
-        logicalDevice = tmpDevice;
         c.vkGetDeviceQueue(logicalDevice, presentIndex, 0, &presentQueue);
         c.vkGetDeviceQueue(logicalDevice, graphicsIndex, 0, &graphicsQueue);
         c.vkGetDeviceQueue(logicalDevice, computeIndex, 0, &computeQueue);
         c.vkGetDeviceQueue(logicalDevice, transferIndex, 0, &transferQueue);
-
+        print("pres: {}, graph: {} comp: {}, trans: {}\n", .{presentIndex, graphicsIndex, computeIndex, transferIndex});
         break;
     }
 
@@ -983,7 +1067,6 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
         swapchainFormat = formats[0];
         if (formatCount == 1 and formats[0].format == c.VK_FORMAT_UNDEFINED)
         {
-            print("undefined format\n", .{});
             swapchainFormat = c.VkSurfaceFormatKHR {
                 .format = c.VK_FORMAT_B8G8R8A8_UNORM,
                 .colorSpace = c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -994,7 +1077,6 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
             var i: u32 = 0;
             while(i < formatCount) : (i += 1)
             {
-                print("{}: format: {}\n", .{i, formats[i]});
                 if (formats[i].format == swapchainWantedFormat.format and
                     formats[i].colorSpace == swapchainWantedFormat.colorSpace)
                 {
@@ -1004,13 +1086,13 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
 
             }
         }
+        print("Swapchainformat: {}\n", .{swapchainFormat});
     }
     {
         var i: u32 = 0;
         presentMode = c.VK_PRESENT_MODE_FIFO_KHR;
         while(i < presentModeCount) : (i += 1)
         {
-            print("presentModes {}: {}\n", .{i, presentModes[i]});
             if(presentModes[i] == presentModeWanted)
             {
                 presentMode = presentModeWanted;
@@ -1045,7 +1127,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
             imageCount = capabilities.maxImageCount;
         }
 
-        var createInfo = c.VkSwapchainCreateInfoKHR {
+        var swapchainCreateInfo = c.VkSwapchainCreateInfoKHR {
             .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
             .surface = surface,
 
@@ -1058,7 +1140,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
 
             .imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 0, // NOTICE SET THIS TO 0 OR 2+, CAN CRASH WITH 1
-            .pQueueFamilyIndices = null,
+            .pQueueFamilyIndices = &([_]u32{ 0, 0 }),
 
             .preTransform = capabilities.currentTransform,
             .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
@@ -1071,9 +1153,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
             .flags = 0,
         };
 
-         try checkSuccess(c.vkCreateSwapchainKHR(logicalDevice, &createInfo, null, &swapChain));
-
-
+         try checkSuccess(c.vkCreateSwapchainKHR(logicalDevice, &swapchainCreateInfo, null, &swapChain));
 
         //swapChainImages
         try checkSuccess(c.vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, null));
@@ -1107,7 +1187,6 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
                 .pNext = null,
                 .flags = 0,
             };
-            print("create view: {}, format: {} swapchainimage: {}\n", .{i, swapchainFormat, swapchainImage});
             try checkSuccess(c.vkCreateImageView(logicalDevice, &imageViewCreateInfo, null, &swapChainImageViews[i]));
         }
     }
