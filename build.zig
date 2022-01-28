@@ -115,9 +115,10 @@ fn addShader(b: *std.build.Builder, exe: anytype, in_file: []const u8, out_file:
 
     const run_cmd = b.addSystemCommand(&[_][]const u8{
         "glslc",
+        full_in,
+        "--target-env=vulkan1.2",
         "-o",
         full_out,
-        full_in,
     });
     exe.step.dependOn(&run_cmd.step);
 }

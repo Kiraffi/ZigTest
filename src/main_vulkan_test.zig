@@ -22,7 +22,7 @@ const HEIGHT = 600;
 
 const MAX_FRAMES_IN_FLIGHT = 2;
 
-const enableValidationLayers = std.debug.runtime_safety;
+const enableValidationLayers = false; //std.debug.runtime_safety;
 const validationLayers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const deviceExtensions = [_][*:0]const u8{c.VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
@@ -48,7 +48,7 @@ var window: ?*c.SDL_Window = null;
 
 var currentFrame: usize = 0;
 var instance: c.VkInstance = undefined;
-var callback: c.VkDebugReportCallbackEXT = c.VK_NULL_HANDLE; // NEEDED?
+//var callback: c.VkDebugReportCallbackEXT = null; // NEEDED?
 var surface: c.VkSurfaceKHR = null;
 var physicalDevice: c.VkPhysicalDevice = null; // Is this needed?
 var logicalDevice: c.VkDevice = null;
@@ -57,7 +57,7 @@ var graphicsQueue: c.VkQueue = null;
 var presentQueue: c.VkQueue = null;
 var computeQueue: c.VkQueue = null;
 var transferQueue: c.VkQueue = null;
-var uniqueQueues: u32 = 0;
+//var uniqueQueues: u32 = 0;
 
 
 var swapChainImages: []c.VkImage = undefined;
@@ -70,7 +70,7 @@ var swapChainFramebuffers: []c.VkFramebuffer = undefined;
 var commandPool: c.VkCommandPool = null;
 var commandBuffers: []c.VkCommandBuffer = undefined;
 
-var debugMessenger: c.VkDebugUtilsMessengerEXT = c.VK_NULL_HANDLE;
+var debugMessenger: c.VkDebugUtilsMessengerEXT = null;
 
 var imageAvailableSemaphores: [MAX_FRAMES_IN_FLIGHT]c.VkSemaphore = undefined;
 var renderFinishedSemaphores: [MAX_FRAMES_IN_FLIGHT]c.VkSemaphore = undefined;
@@ -81,7 +81,8 @@ fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, mess
 {
     _ = messageType;
     _ = pUserData;
-    if (messageSeverity >= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    _ = messageSeverity;
+    //if (messageSeverity >= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
         const data = pCallbackData.*;
         print("Validation layer: {s}\n", .{data.pMessage});
@@ -114,6 +115,22 @@ pub fn deinit(allocator : std.mem.Allocator) void
 
 
     allocator.free(swapChainImageViews);
+    if(enableValidationLayers)
+        DestroyDebugReportCallbackEXT(null);
+    
+}
+fn DestroyDebugReportCallbackEXT(pAllocator: ?*const c.VkAllocationCallbacks) void 
+{
+    const func = @ptrCast(c.PFN_vkDestroyDebugUtilsMessengerEXT, c.vkGetInstanceProcAddr(
+        instance, "vkDestroyDebugUtilsMessengerEXT")) orelse unreachable;
+    func(instance, debugMessenger, pAllocator);
+}
+fn CreateDebugReportCallbackEXT(pCreateInfo: *const c.VkDebugUtilsMessengerCreateInfoEXT,
+    pAllocator: ?*const c.VkAllocationCallbacks, pCallback: *c.VkDebugUtilsMessengerEXT) c.VkResult
+{
+    const func = @ptrCast(c.PFN_vkCreateDebugUtilsMessengerEXT, c.vkGetInstanceProcAddr(
+        instance, "vkCreateDebugUtilsMessengerEXT")) orelse return c.VK_ERROR_EXTENSION_NOT_PRESENT;
+    return func(instance, pCreateInfo, pAllocator, pCallback);
 }
 
 pub fn main() anyerror!void
@@ -122,9 +139,16 @@ pub fn main() anyerror!void
     defer std.debug.assert(!general_purpose_allocator.deinit());
 
     const allocator = general_purpose_allocator.allocator();
+    defer deinit(allocator);
 
     _ = c.SDL_Init(c.SDL_INIT_VIDEO);
     defer c.SDL_Quit();
+    if(c.SDL_Vulkan_LoadLibrary(null) != 0)
+    {
+        print("Failed to load vulkan library with sdlk\n", .{});
+        return error.FailedToLoadVulkanLibrary;
+    }
+    defer c.SDL_Vulkan_UnloadLibrary();
 
     window = c.SDL_CreateWindow("SDL vulkan zig test", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_SHOWN);
     defer c.SDL_DestroyWindow(window);
@@ -141,12 +165,13 @@ pub fn main() anyerror!void
     }
     defer c.vkDestroySurfaceKHR(instance, surface, null);
 
+
+
     try(pickPhysicalDevice(allocator));
     defer c.vkDestroyDevice(logicalDevice, null);
 
     try(createSwapchain(allocator));
     c.vkDestroySwapchainKHR(logicalDevice, swapChain, null);
-    defer deinit(allocator);
 
     try(createRenderPass());
     defer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
@@ -165,6 +190,7 @@ pub fn main() anyerror!void
     while (c.SDL_PollEvent(&ev) != 0)
     {
         try drawFrame();
+        c.SDL_Delay(10);
     }
 
     try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
@@ -223,9 +249,11 @@ fn drawFrame() !void {
 fn createFramebuffers(allocator: std.mem.Allocator) !void
 {
     swapChainFramebuffers = try allocator.alloc(c.VkFramebuffer, swapChainImageViews.len);
-
-    for (swapChainImageViews) |swap_chain_image_view, i| {
-        const attachments = [_]c.VkImageView{swap_chain_image_view};
+    print("swap len: {}\n", .{swapChainImageViews.len});
+    for (swapChainImageViews) |swap_chain_image_view, i| 
+    {
+        _ = swap_chain_image_view;
+        const attachments = [_]c.VkImageView{ swap_chain_image_view };
 
         const framebufferInfo = c.VkFramebufferCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -239,8 +267,9 @@ fn createFramebuffers(allocator: std.mem.Allocator) !void
             .pNext = null,
             .flags = 0,
         };
-
+        print("framebufferInfo: {}\n", .{framebufferInfo});
         try checkSuccess(c.vkCreateFramebuffer(logicalDevice, &framebufferInfo, null, &swapChainFramebuffers[i]));
+        print("framebufferInfo after: {}\n", .{framebufferInfo});
     }
 }
 
@@ -273,7 +302,7 @@ fn createCommandBuffers(allocator: std.mem.Allocator) !void {
 
     try checkSuccess(c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, commandBuffers.ptr));
 
-    for (commandBuffers)  | _, i | { //|, i| {
+    for (commandBuffers)  | commandBuffer, i | { //|, i| {
         const beginInfo = c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = c.VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
@@ -281,7 +310,7 @@ fn createCommandBuffers(allocator: std.mem.Allocator) !void {
             .pInheritanceInfo = null,
         };
 
-        try checkSuccess(c.vkBeginCommandBuffer(commandBuffers[i], &beginInfo));
+        try checkSuccess(c.vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
         const clearColor = [1]c.VkClearValue{c.VkClearValue{
             .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
@@ -301,14 +330,14 @@ fn createCommandBuffers(allocator: std.mem.Allocator) !void {
             .pNext = null,
         };
 
-        c.vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
+        c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
         {
-            c.vkCmdBindPipeline(commandBuffers[i], c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-            c.vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+            c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+            c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         }
-        c.vkCmdEndRenderPass(commandBuffers[i]);
+        c.vkCmdEndRenderPass(commandBuffer);
 
-        try checkSuccess(c.vkEndCommandBuffer(commandBuffers[i]));
+        try checkSuccess(c.vkEndCommandBuffer(commandBuffer));
     }
 }
 
@@ -389,8 +418,9 @@ fn createRenderPass() anyerror !void
         .pNext = null,
         .flags = 0,
     };
-
+    print("renderpass: {}", .{renderPass});
     try checkSuccess(c.vkCreateRenderPass(logicalDevice, &renderPassInfo, null, &renderPass));
+    print("renderpass: {}", .{renderPass});
 }
 
 fn createShaderModule(code: []align(@alignOf(u32)) const u8) !c.VkShaderModule {
@@ -573,13 +603,8 @@ fn createGraphicsPipeline(allocator: std.mem.Allocator) !void {
         .basePipelineIndex = 0,
     }};
 
-    try checkSuccess(c.vkCreateGraphicsPipelines(
-        logicalDevice,
-        null,
-        @intCast(u32, pipelineInfo.len),
-        &pipelineInfo,
-        null,
-        @as(*[1]c.VkPipeline, &graphicsPipeline),
+    try checkSuccess(c.vkCreateGraphicsPipelines(logicalDevice, null, @intCast(u32, pipelineInfo.len),
+        &pipelineInfo, null, @as(*[1]c.VkPipeline, &graphicsPipeline),
     ));
 
     c.vkDestroyShaderModule(logicalDevice, fragShaderModule, null);
@@ -696,6 +721,11 @@ fn createInstance(allocator: std.mem.Allocator) anyerror!void
     };
 
     try(checkSuccess(c.vkCreateInstance(&createInfo, null, &instance)));
+
+    if(enableValidationLayers)
+    {
+        try checkSuccess(CreateDebugReportCallbackEXT(&debugUtilMessengerCreateInfo, null, &debugMessenger));
+    }
 }
 
 fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
@@ -953,6 +983,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
         swapchainFormat = formats[0];
         if (formatCount == 1 and formats[0].format == c.VK_FORMAT_UNDEFINED)
         {
+            print("undefined format\n", .{});
             swapchainFormat = c.VkSurfaceFormatKHR {
                 .format = c.VK_FORMAT_B8G8R8A8_UNORM,
                 .colorSpace = c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
@@ -963,10 +994,12 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
             var i: u32 = 0;
             while(i < formatCount) : (i += 1)
             {
+                print("{}: format: {}\n", .{i, formats[i]});
                 if (formats[i].format == swapchainWantedFormat.format and
                     formats[i].colorSpace == swapchainWantedFormat.colorSpace)
                 {
                     swapchainFormat = swapchainWantedFormat;
+                    break;
                 }
 
             }
@@ -977,12 +1010,14 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
         presentMode = c.VK_PRESENT_MODE_FIFO_KHR;
         while(i < presentModeCount) : (i += 1)
         {
+            print("presentModes {}: {}\n", .{i, presentModes[i]});
             if(presentModes[i] == presentModeWanted)
             {
                 presentMode = presentModeWanted;
                 break;
             }
         }
+        print("presentMode: {}\n", .{presentMode});
     }
 
     {
@@ -997,12 +1032,13 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
         {
             var w: i32 = 0;
             var h: i32 = 0;
-            c.SDL_GetWindowSize(window, &w, &h);
+            c.SDL_Vulkan_GetDrawableSize(window, &w, &h);
 
             swapchainImageSize.width = std.math.max(capabilities.minImageExtent.width, std.math.min(capabilities.maxImageExtent.width, w));
             swapchainImageSize.height = std.math.max(capabilities.minImageExtent.height, std.math.min(capabilities.maxImageExtent.height, h));
         }
-
+        print("swapchainimagesize: {}\n", .{swapchainImageSize});
+        print("capabilities: {}\n", .{capabilities});
         var imageCount: u32 = capabilities.minImageCount + 1;
         if (capabilities.maxImageCount > 0 and imageCount > capabilities.maxImageCount)
         {
@@ -1029,7 +1065,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
             .presentMode = presentMode,
             .clipped = c.VK_TRUE,
 
-            .oldSwapchain = swapChain,
+            .oldSwapchain = null, //swapChain,
 
             .pNext = null,
             .flags = 0,
@@ -1071,7 +1107,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
                 .pNext = null,
                 .flags = 0,
             };
-
+            print("create view: {}, format: {} swapchainimage: {}\n", .{i, swapchainFormat, swapchainImage});
             try checkSuccess(c.vkCreateImageView(logicalDevice, &imageViewCreateInfo, null, &swapChainImageViews[i]));
         }
     }
