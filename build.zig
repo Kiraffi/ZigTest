@@ -3,7 +3,7 @@ const std = @import("std");
 
 
 fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zigFile: []const u8,
-    target: std.zig.CrossTarget, mode: std.builtin.Mode, runnable: bool, testable: bool) void
+    target: std.zig.CrossTarget, mode: std.builtin.Mode, runnable: bool, testable: bool) anyerror !void
 {
     // to keep this debuggale from vscode without having to figure out some way to push the launch.json
     // to read the outputfile.
@@ -39,11 +39,15 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
     exe.linkLibC();
     exe.install();
 
+    try addShader(b, exe, "shader.vert", "vert.spv");
+    try addShader(b, exe, "shader.frag", "frag.spv");
+
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
+
 
     if(runnable)
     {
@@ -62,7 +66,7 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
 
 
 
-pub fn build(b: *std.build.Builder) !void
+pub fn build(b: *std.build.Builder) anyerror!void
 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -96,6 +100,24 @@ pub fn build(b: *std.build.Builder) !void
     //buildTarget(sdkPath, b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false);
     //buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, true, false);
 
-    buildTarget(sdkPath, b, "zigmain", "src/main_vulkan_test.zig", target, mode, true, false);
+    try(buildTarget(sdkPath, b, "zigmain", "src/main_vulkan_test.zig", target, mode, true, false));
 
+}
+
+
+fn addShader(b: *std.build.Builder, exe: anytype, in_file: []const u8, out_file: []const u8) !void
+{
+    // example:
+    // glslc -o shaders/vert.spv shaders/shader.vert
+    const dirname = "data/shader";
+    const full_in = try std.fs.path.join(b.allocator, &[_][]const u8{ dirname, in_file });
+    const full_out = try std.fs.path.join(b.allocator, &[_][]const u8{ dirname, out_file });
+
+    const run_cmd = b.addSystemCommand(&[_][]const u8{
+        "glslc",
+        "-o",
+        full_out,
+        full_in,
+    });
+    exe.step.dependOn(&run_cmd.step);
 }
