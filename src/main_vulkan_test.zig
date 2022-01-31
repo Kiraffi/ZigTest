@@ -86,6 +86,94 @@ const IMAGES_IN_FLIGHT_MAX: u32 = 64;
 var imagesInFlight: [IMAGES_IN_FLIGHT_MAX]c.VkFence = undefined;
 var imagesInFlightAmount: usize = 0;
 
+
+
+
+
+
+
+
+const VulkanMemoryAllocation = struct {
+    pos: u32 = 0,
+    size: u32 = 0,
+    memoryProperties: c.VkMemoryPropertyFlags,
+    deviceMemory: c.VkDeviceMemory = null,
+};
+
+const VulkanMemory = struct {
+    memorySize: u32 = 0,
+    used: u32 = 0,
+    usageFlags: c.VkBufferUsageFlags,
+    allocations: std.ArrayList(VulkanMemoryAllocation),
+    buffer: c.VkBuffer = null,
+
+    pub fn createBuffer(allocator: std.mem.Allocator, usage: c.VkBufferUsageFlags, bufferSize: u32) !VulkanMemory 
+    {
+        const bufferInfo = c.VkBufferCreateInfo {
+            .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = bufferSize,
+            .usage = usage,
+            .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+        };
+
+        var vulkanMemory = VulkanMemory{.memorySize = bufferSize, .usageFlags = usage, 
+            .allocations = std.ArrayList(VulkanMemoryAllocation).init(allocator) };
+
+        try checkSuccess(c.vkCreateBuffer(logicalDevice, &bufferInfo, null, &vulkanMemory.buffer));
+        return vulkanMemory;
+    }
+
+    pub fn deinit(self: *VulkanMemory) void
+    {
+        for(self.allocations.items) |alloc|
+            c.vkFreeMemory(logicalDevice, alloc.deviceMemory, null);
+
+        c.vkDestroyBuffer(logicalDevice, self.buffer, null);
+        self.allocations.deinit();
+    }
+
+    pub fn createAllocation(self: *VulkanMemory, allocationSize: u32, memoryProperties: c.VkMemoryPropertyFlags) !VulkanMemoryAllocation
+    {
+        var memRequirements: c.VkMemoryRequirements = undefined;
+        c.vkGetBufferMemoryRequirements(logicalDevice, self, &memRequirements);
+
+        if(allocationSize > memRequirements.size or allocationSize + self.used > self.memorySize)
+            return error.NoMemoryForAllocation;
+
+        const allocInfo = c.VkMemoryAllocateInfo {
+            .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = memRequirements.size,
+            .memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, memoryProperties),
+        };
+        var allocation = VulkanMemoryAllocation {.pos = self.used, .size = allocationSize, .memoryProperties = memoryProperties };
+        try checkSuccess(c.vkAllocateMemory(logicalDevice, &allocInfo, null, &allocation.deviceMemory));
+
+        try self.allocations.append(allocation);
+        return allocation;
+    }
+};
+
+
+
+var deviceOnlyMemory: VulkanMemory = undefined;
+
+
+fn findMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
+{
+    var memProperties: c.VkPhysicalDeviceMemoryProperties = undefined;
+    c.vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+    var i: u32 = 0;
+    while(i < memProperties.memoryTypeCount) : (i += 1 )
+    {
+        if ((typeFilter & (1 << i)) != 0 and (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+    return error.NoAppropriateMemoryTypeFound;
+}
+
+
 fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, messageType: c.VkDebugUtilsMessageTypeFlagsEXT,
     pCallbackData: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, pUserData: ?*anyopaque) callconv(.C) c.VkBool32
 {
@@ -118,6 +206,7 @@ fn cleanupSwapchain(allocator: std.mem.Allocator) !void
 
 pub fn deinit(allocator : std.mem.Allocator) void
 {
+    deviceOnlyMemory.deinit();
     if(swapChain != null)
         try cleanupSwapchain(allocator);
     if(swapChain != null)
