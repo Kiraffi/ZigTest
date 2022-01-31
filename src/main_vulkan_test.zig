@@ -45,6 +45,7 @@ var windowWidth: u32 = WIDTH;
 var windowHeight: u32 = HEIGHT;
 
 var window: ?*c.SDL_Window = null;
+var resized = false;
 
 var currentFrame: usize = 0;
 var instance: c.VkInstance = undefined;
@@ -72,16 +73,18 @@ var renderPass: c.VkRenderPass = null;
 var pipelineLayout: c.VkPipelineLayout = null;
 var graphicsPipeline: c.VkPipeline = null;
 var swapChainFramebuffers: []c.VkFramebuffer = undefined;
-var commandPool: c.VkCommandPool = null;
-var commandBuffers: []c.VkCommandBuffer = undefined;
 
 var debugMessenger: c.VkDebugUtilsMessengerEXT = null;
-//var callback: c.VkDebugReportCallbackEXT = null; // old one NEEDED?
+
+var commandPools: [MAX_FRAMES_IN_FLIGHT]c.VkCommandPool = undefined;
+var commandBuffers: [MAX_FRAMES_IN_FLIGHT]c.VkCommandBuffer = undefined;
 
 var imageAvailableSemaphores: [MAX_FRAMES_IN_FLIGHT]c.VkSemaphore = undefined;
 var renderFinishedSemaphores: [MAX_FRAMES_IN_FLIGHT]c.VkSemaphore = undefined;
 var inFlightFences: [MAX_FRAMES_IN_FLIGHT]c.VkFence = undefined;
-
+const IMAGES_IN_FLIGHT_MAX: u32 = 64;
+var imagesInFlight: [IMAGES_IN_FLIGHT_MAX]c.VkFence = undefined;
+var imagesInFlightAmount: usize = 0;
 
 fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, messageType: c.VkDebugUtilsMessageTypeFlagsEXT,
     pCallbackData: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, pUserData: ?*anyopaque) callconv(.C) c.VkBool32
@@ -89,7 +92,7 @@ fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, mess
     _ = messageType;
     _ = pUserData;
     _ = messageSeverity;
-    //if (messageSeverity >= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    if (messageSeverity >= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
         const data = pCallbackData.*;
         print("Validation layer: {s}\n", .{data.pMessage});
@@ -97,22 +100,8 @@ fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, mess
     return c.VK_FALSE;
 }
 
-
-pub fn deinit(allocator : std.mem.Allocator) void
+fn cleanupSwapchain(allocator: std.mem.Allocator) !void
 {
-    var i: usize = 0;
-    while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1)
-    {
-        c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], null);
-        c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], null);
-        c.vkDestroyFence(logicalDevice, inFlightFences[i], null);
-    }
-
-    c.vkDestroyCommandPool(logicalDevice, commandPool, null);
-    allocator.free(commandBuffers);
-
-
-
     for (swapChainFramebuffers) |framebuffer|
     {
         c.vkDestroyFramebuffer(logicalDevice, framebuffer, null);
@@ -125,13 +114,31 @@ pub fn deinit(allocator : std.mem.Allocator) void
     }
     allocator.free(swapChainImages);
     allocator.free(swapChainImageViews);
+}
+
+pub fn deinit(allocator : std.mem.Allocator) void
+{
+    if(swapChain != null)
+        try cleanupSwapchain(allocator);
+    if(swapChain != null)
+        c.vkDestroySwapchainKHR(logicalDevice, swapChain, null);
+
+    var i: usize = 0;
+    while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1)
+    {
+        c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], null);
+        c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], null);
+        c.vkDestroyFence(logicalDevice, inFlightFences[i], null);
+        c.vkDestroyCommandPool(logicalDevice, commandPools[i], null);
+    }
+    //allocator.free(commandBuffers);
+
+
 
     c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
     c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
 
     c.vkDestroyRenderPass(logicalDevice, renderPass, null);
-
-    c.vkDestroySwapchainKHR(logicalDevice, swapChain, null);
 
     c.vkDestroyDevice(logicalDevice, null);
 
@@ -165,7 +172,7 @@ pub fn main() anyerror!void
     //defer c.SDL_Vulkan_UnloadLibrary();
 
     window = c.SDL_CreateWindow("SDL vulkan zig test",
-        c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, c.SDL_WINDOW_VULKAN);// | c.SDL_WINDOW_SHOWN);
+        c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE);
 
     try(createInstance(allocator));
 
@@ -189,8 +196,7 @@ pub fn main() anyerror!void
 
 
     try createFramebuffers(allocator);
-    try createCommandPool();
-    try createCommandBuffers(allocator);
+    try createCommandPoolsAndBuffers();
     try createSyncObjects();
 
 
@@ -206,24 +212,61 @@ pub fn main() anyerror!void
                 else => {}
             }
         }
-        try drawFrame();
+        try drawFrame(allocator);
         c.SDL_Delay(10);
     }
     try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
 
 }
 
-fn drawFrame() !void
+fn drawFrame(allocator : std.mem.Allocator) !void
 {
+    const oldSize = swapchainImageSize;
+    var w: i32 = 0;
+    var h: i32 = 0;
+    c.SDL_Vulkan_GetDrawableSize(window, &w, &h);
+    if(oldSize.width != w or oldSize.height != h)
+    {
+        resized = true;
+         try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
+    }
+    c.SDL_GetWindowSize(window, &w, &h);
+    if(w == 0 or h == 0)
+        return;
+
+    const sdlWindowFlags = c.SDL_GetWindowFlags(window);
+    if((sdlWindowFlags & c.SDL_WINDOW_MINIMIZED) != 0)
+        return;
+
     try checkSuccess(c.vkWaitForFences(logicalDevice, 1, @as(*[1]c.VkFence, &inFlightFences[currentFrame]), c.VK_TRUE, std.math.maxInt(u64)));
-    try checkSuccess(c.vkResetFences(logicalDevice, 1, @as(*[1]c.VkFence, &inFlightFences[currentFrame])));
+    if(imageAvailableSemaphores[currentFrame] == null)
+        return;
 
     var imageIndex: u32 = undefined;
-    try checkSuccess(c.vkAcquireNextImageKHR(logicalDevice, swapChain, std.math.maxInt(u64), imageAvailableSemaphores[currentFrame], null, &imageIndex));
 
-    
-    const commandBuffer = commandBuffers[imageIndex];
-    try beginSingleTimeCommands(commandBuffer);
+    {
+        const result = c.vkAcquireNextImageKHR(logicalDevice, swapChain, std.math.maxInt(u64), imageAvailableSemaphores[currentFrame], null, &imageIndex);
+
+        if (result == c.VK_ERROR_OUT_OF_DATE_KHR) 
+        {
+            try recreateSwapchain(allocator);
+            return;
+        } 
+        else if (result != c.VK_SUCCESS and result != c.VK_SUBOPTIMAL_KHR) 
+        {
+            return error.FailedToAquireSwapchainImage;
+        }
+    }
+
+    if (imagesInFlight[imageIndex] != null) 
+    {
+        try checkSuccess(c.vkWaitForFences(logicalDevice, 1, &imagesInFlight[imageIndex], c.VK_TRUE, std.math.maxInt(u64)));
+    }
+    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+    const commandPool = commandPools[currentFrame];
+    const commandBuffer = commandBuffers[currentFrame];
+    try beginSingleTimeCommands(commandPool, commandBuffer);
 
     const clearColor = [1]c.VkClearValue{c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
@@ -288,7 +331,7 @@ fn drawFrame() !void
         .pNext = null,
     }};
 
-
+    try checkSuccess(c.vkResetFences(logicalDevice, 1, @as(*[1]c.VkFence, &inFlightFences[currentFrame])));
 
     try checkSuccess(c.vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]));
 
@@ -308,8 +351,19 @@ fn drawFrame() !void
         .pResults = null,
     };
 
-    try checkSuccess(c.vkQueuePresentKHR(presentQueue, &presentInfo));
-    try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
+    {
+        const result = c.vkQueuePresentKHR(presentQueue, &presentInfo);
+
+        if (result == c.VK_ERROR_OUT_OF_DATE_KHR or result == c.VK_SUBOPTIMAL_KHR or resized) 
+        {
+            try recreateSwapchain(allocator);
+        }
+        else if (result != c.VK_SUCCESS) 
+        {
+            return error.FailedToPresentSwapchainImage;
+        }
+    }
+
 
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
@@ -339,7 +393,7 @@ fn createFramebuffers(allocator: std.mem.Allocator) !void
     }
 }
 
-fn createCommandPool() !void
+fn createCommandPoolsAndBuffers() !void
 {
     const poolInfo = c.VkCommandPoolCreateInfo {
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -348,11 +402,25 @@ fn createCommandPool() !void
         .flags = 0,
     };
 
-    try checkSuccess(c.vkCreateCommandPool(logicalDevice, &poolInfo, null, &commandPool));
+    var i: usize = 0;
+    while(i < MAX_FRAMES_IN_FLIGHT) : (i += 1)
+    {
+        try checkSuccess(c.vkCreateCommandPool(logicalDevice, &poolInfo, null, &commandPools[i]));
+
+        const allocInfo = c.VkCommandBufferAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = commandPools[i],
+            .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+            .pNext = null,
+        };
+
+        try checkSuccess(c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffers[i]));
+    }
 }
 
 
-fn beginSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void
+fn beginSingleTimeCommands(commandPool: c.VkCommandPool, commandBuffer: c.VkCommandBuffer) !void
 {
      try checkSuccess(c.vkResetCommandPool(logicalDevice, commandPool, 0));
 
@@ -391,22 +459,42 @@ fn endSingleTimeCommands(commandBuffer: c.VkCommandBuffer, queue: c.VkQueue) !vo
 
 
 
-
-
-
-fn createCommandBuffers(allocator: std.mem.Allocator) !void
+fn recreateSwapchain(allocator: std.mem.Allocator) !void
 {
-    commandBuffers = try allocator.alloc(c.VkCommandBuffer, swapChainFramebuffers.len);
 
-    const allocInfo = c.VkCommandBufferAllocateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = commandPool,
-        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = @intCast(u32, commandBuffers.len),
-        .pNext = null,
-    };
+    const oldFormat = swapchainFormat;
+    try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
+    try cleanupSwapchain(allocator);
+    try createSwapchain(allocator);
+    if(oldFormat.format != swapchainFormat.format or oldFormat.colorSpace != swapchainFormat.colorSpace)
+    {
+        c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
+        c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
 
-    try checkSuccess(c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, commandBuffers.ptr));
+        c.vkDestroyRenderPass(logicalDevice, renderPass, null);
+
+        try(createRenderPass());
+        try(createGraphicsPipeline());
+    }
+    try createFramebuffers(allocator);
+
+//    var i: usize = 0;
+//    while(i < IMAGES_IN_FLIGHT_MAX) : (i += 1)
+//    {
+//        if(imagesInFlight[i] != null)
+//            try checkSuccess(c.vkWaitForFences(logicalDevice, 1, &imagesInFlight[i], c.VK_TRUE, std.math.maxInt(u64)));
+//        imagesInFlight[i] = null;
+//    }
+
+    imagesInFlightAmount = swapChainImages.len;
+    try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
+
+}
+
+
+fn createCommandBuffers() !void //allocator: std.mem.Allocator) !void
+{
+
 }
 
 fn createSyncObjects() !void
@@ -430,6 +518,11 @@ fn createSyncObjects() !void
         try checkSuccess(c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]));
         try checkSuccess(c.vkCreateFence(logicalDevice, &fenceInfo, null, &inFlightFences[i]));
     }
+    i = 0;
+    while( i < IMAGES_IN_FLIGHT_MAX ) : ( i += 1 )
+        imagesInFlight[i] = null;
+
+    imagesInFlightAmount = swapChainImages.len;
 }
 
 fn createRenderPass() anyerror !void
@@ -979,8 +1072,8 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
 
         while(j < queueFamilyCount) : (j += 1)
         {
-            // Probably bad to force all queues to work in same index.
-            const bits = c.VK_QUEUE_GRAPHICS_BIT | c.VK_QUEUE_COMPUTE_BIT | c.VK_QUEUE_TRANSFER_BIT;
+            // Probably bad to force all queues to work in same index. Transfer queue exists on graphics and compute....
+            const bits = c.VK_QUEUE_GRAPHICS_BIT | c.VK_QUEUE_COMPUTE_BIT; // | c.VK_QUEUE_TRANSFER_BIT;
             const flags = queues[j].queueFlags;
             print("flags for family: {}\n", .{flags});
             if((queues[j].queueFlags & bits) != bits)
@@ -1027,7 +1120,7 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
             .fullDrawIndexUint32 = 0,
             .imageCubeArray = 0,
             .independentBlend = 0,
-            .geometryShader = 0,
+            .geometryShader = 1,
             .tessellationShader = 0,
             .sampleRateShading = 0,
             .dualSrcBlend = 0,
@@ -1063,7 +1156,7 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
             .shaderClipDistance = 0,
             .shaderCullDistance = 0,
             .shaderFloat64 = 0,
-            .shaderInt64 = 0,
+            .shaderInt64 = 1,
             .shaderInt16 = 0,
             .shaderResourceResidency = 0,
             .shaderResourceMinLod = 0,
@@ -1120,6 +1213,8 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
 
 fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
 {
+    resized = false;
+ 
     var formatCount: u32 = 0;
     try checkSuccess(c.vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, null));
 
@@ -1224,7 +1319,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
             .presentMode = presentMode,
             .clipped = c.VK_TRUE,
 
-            .oldSwapchain = null, //swapChain,
+            .oldSwapchain = swapChain,
 
             .pNext = null,
             .flags = 0,
