@@ -221,23 +221,74 @@ fn drawFrame() !void
     var imageIndex: u32 = undefined;
     try checkSuccess(c.vkAcquireNextImageKHR(logicalDevice, swapChain, std.math.maxInt(u64), imageAvailableSemaphores[currentFrame], null, &imageIndex));
 
+    
+    const commandBuffer = commandBuffers[imageIndex];
+    try beginSingleTimeCommands(commandBuffer);
+
+    const clearColor = [1]c.VkClearValue{c.VkClearValue{
+        .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
+    }};
+
+    const renderPassInfo = c.VkRenderPassBeginInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = renderPass,
+        .framebuffer = swapChainFramebuffers[imageIndex],
+        .renderArea = c.VkRect2D {
+            .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+            .extent = swapchainImageSize,
+        },
+        .clearValueCount = 1,
+        .pClearValues = @as(*const [1]c.VkClearValue, &clearColor),
+
+        .pNext = null,
+    };
+
+    c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
+    {
+        
+        const viewPort = c.VkViewport{ .x = 0.0, .y = 0.0, .width = @intToFloat(f32, swapchainImageSize.width), .height = @intToFloat(f32, swapchainImageSize.height), .minDepth = 0.0, .maxDepth = 1.0 };
+        const scissors = c.VkRect2D{ .offset = c.VkOffset2D{ .x = 0, .y = 0 }, .extent = swapchainImageSize };
+
+        //insertDebugRegion(commandBuffer, "Render", Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        c.vkCmdSetViewport(commandBuffer, 0, 1, &viewPort);
+        c.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
+
+        c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+        c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    }
+    c.vkCmdEndRenderPass(commandBuffer);
+
+    try checkSuccess(c.vkEndCommandBuffer(commandBuffer));
+
+
+
+
+
+
+
+
+
+
     var waitSemaphores = [_]c.VkSemaphore{imageAvailableSemaphores[currentFrame]};
     var waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
     const signalSemaphores = [_]c.VkSemaphore{renderFinishedSemaphores[currentFrame]};
 
+   
     var submitInfo = [_]c.VkSubmitInfo{c.VkSubmitInfo{
         .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &waitSemaphores,
         .pWaitDstStageMask = &waitStages,
         .commandBufferCount = 1,
-        .pCommandBuffers = commandBuffers.ptr + imageIndex,
+        .pCommandBuffers = &commandBuffer,
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &signalSemaphores,
 
         .pNext = null,
     }};
+
+
 
     try checkSuccess(c.vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]));
 
@@ -258,6 +309,7 @@ fn drawFrame() !void
     };
 
     try checkSuccess(c.vkQueuePresentKHR(presentQueue, &presentInfo));
+    try checkSuccess(c.vkDeviceWaitIdle(logicalDevice));
 
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
@@ -299,6 +351,49 @@ fn createCommandPool() !void
     try checkSuccess(c.vkCreateCommandPool(logicalDevice, &poolInfo, null, &commandPool));
 }
 
+
+fn beginSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void
+{
+     try checkSuccess(c.vkResetCommandPool(logicalDevice, commandPool, 0));
+
+    const beginInfo = c.VkCommandBufferBeginInfo { 
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = null,
+        .pNext = null,
+    };
+
+     try checkSuccess(c.vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+    return;
+}
+
+fn endSingleTimeCommands(commandBuffer: c.VkCommandBuffer, queue: c.VkQueue) !void
+{
+    try checkSuccess(c.vkEndCommandBuffer(commandBuffer));
+
+    var submitInfo = [_]c.VkSubmitInfo{c.VkSubmitInfo{
+        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = null,
+        .pWaitDstStageMask = null,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffer,
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = null,
+
+        .pNext = null,
+    }};
+
+    try checkSuccess(c.vkQueueSubmit(queue, 1, &submitInfo, c.VK_NULL_HANDLE));
+    try checkSuccess(c.vkQueueWaitIdle(queue));
+}
+
+
+
+
+
+
 fn createCommandBuffers(allocator: std.mem.Allocator) !void
 {
     commandBuffers = try allocator.alloc(c.VkCommandBuffer, swapChainFramebuffers.len);
@@ -312,44 +407,6 @@ fn createCommandBuffers(allocator: std.mem.Allocator) !void
     };
 
     try checkSuccess(c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, commandBuffers.ptr));
-
-    for (commandBuffers)  | commandBuffer, i | { //|, i| {
-        const beginInfo = c.VkCommandBufferBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .flags = c.VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-            .pNext = null,
-            .pInheritanceInfo = null,
-        };
-
-        try checkSuccess(c.vkBeginCommandBuffer(commandBuffer, &beginInfo));
-
-        const clearColor = [1]c.VkClearValue{c.VkClearValue{
-            .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
-        }};
-
-        const renderPassInfo = c.VkRenderPassBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = renderPass,
-            .framebuffer = swapChainFramebuffers[i],
-            .renderArea = c.VkRect2D{
-                .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-                .extent = swapchainImageSize,
-            },
-            .clearValueCount = 1,
-            .pClearValues = @as(*const [1]c.VkClearValue, &clearColor),
-
-            .pNext = null,
-        };
-
-        c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
-        {
-            c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-            c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-        }
-        c.vkCmdEndRenderPass(commandBuffer);
-
-        try checkSuccess(c.vkEndCommandBuffer(commandBuffer));
-    }
 }
 
 fn createSyncObjects() !void
@@ -502,26 +559,27 @@ fn createGraphicsPipeline() !void
         .flags = 0,
     };
 
-    const viewport = [_]c.VkViewport{c.VkViewport{
-        .x = 0.0,
-        .y = 0.0, //@intToFloat(f32, swapChainExtent.height),
-        .width = @intToFloat(f32, swapchainImageSize.width),
-        .height = @intToFloat(f32, swapchainImageSize.height), // flipping viewport -height, y = height
-        .minDepth = 0.0,
-        .maxDepth = 1.0,
-    }};
-// dynamic state
-    const scissor = [_]c.VkRect2D{c.VkRect2D{
-        .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-        .extent = swapchainImageSize,
-    }};
+// Dynamic state for these....
+//    const viewport = [_]c.VkViewport{c.VkViewport{
+//        .x = 0.0,
+//        .y = 0.0, //@intToFloat(f32, swapChainExtent.height),
+//        .width = @intToFloat(f32, swapchainImageSize.width),
+//        .height = @intToFloat(f32, swapchainImageSize.height), // flipping viewport -height, y = height
+//        .minDepth = 0.0,
+//        .maxDepth = 1.0,
+//    }};
+//// dynamic state
+//    const scissor = [_]c.VkRect2D{c.VkRect2D{
+//        .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+//        .extent = swapchainImageSize,
+//    }};
 
     const viewportState = c.VkPipelineViewportStateCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount = 1,
-        .pViewports = &viewport,
+        .pViewports = null, // dynamic &viewport,
         .scissorCount = 1,
-        .pScissors = &scissor,
+        .pScissors = null, // dynamic .&scissor,
 
         .pNext = null,
         .flags = 0,
@@ -590,6 +648,25 @@ fn createGraphicsPipeline() !void
         .pPushConstantRanges = null,
     };
 
+    //const dynamicStates = ;
+//    
+//    typedef struct VkPipelineDynamicStateCreateInfo {
+//    VkStructureType   sType;
+//    const  void *             pNext;
+//    VkPipelineDynamicStateCreateFlags      flags;
+//    uint32_t                 dynamicStateCount;
+//    const  VkDynamicState *   pDynamicStates;
+//} VkPipelineDynamicStateCreateInfo;
+
+    const dynamicStates = [_]c.VkDynamicState{ c.VK_DYNAMIC_STATE_VIEWPORT, c.VK_DYNAMIC_STATE_SCISSOR };
+    const dynamicStateInfo = c.VkPipelineDynamicStateCreateInfo{ 
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = dynamicStates.len,
+        .pDynamicStates = &dynamicStates,
+        .flags = 0,
+        .pNext = null
+    };
+
     try checkSuccess(c.vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, null, &pipelineLayout));
 
     const pipelineInfo = [_]c.VkGraphicsPipelineCreateInfo{c.VkGraphicsPipelineCreateInfo{
@@ -611,7 +688,7 @@ fn createGraphicsPipeline() !void
         .flags = 0,
         .pTessellationState = null,
         .pDepthStencilState = null,
-        .pDynamicState = null,
+        .pDynamicState = &dynamicStateInfo,
         .basePipelineIndex = 0,
     }};
 
