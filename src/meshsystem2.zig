@@ -84,7 +84,7 @@ pub fn init() bool
         {
             j = i / 3;
             const k: usize = j + 0; // breaks if on same x-line 2 points as in j + 0...
-            const ki: usize = j + 5;
+            const ki: usize = j + 1;
             if(i % 3 == 0)
             {
                 // this for some reason breaks the compute...?
@@ -156,7 +156,7 @@ pub fn draw(texture: ogl.Texture) void
 //    c.glMemoryBarrier(c.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 
-const COMPUTE_X_GROUP_SIZE: u32 = 4 * 4 * 1;
+const COMPUTE_X_GROUP_SIZE: u32 = 4 * 16 * 1;
 const COMPUTE_Y_GROUP_SIZE: u32 = 64 * 1 * 1;
 
 pub fn draw2(texture: ogl.Texture) void
