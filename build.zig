@@ -14,10 +14,12 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
     exe.addIncludeDir("deps/include");
 
     // Sources
-    exe.addCSourceFile("deps/src/glad.c", &[_][]const u8{"-std=c99"});
+    exe.addCSourceFile("deps/glad/src/glad.c", &[_][]const u8{"-std=c99"});
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    exe.addIncludeDir("deps/glad/include/");
+    exe.addIncludeDir("deps/VulkanMemoryAllocator/include/");
     if (exe.target.isWindows())
     {
         var sdkIncludePath = std.mem.zeroes([1024]u8);
@@ -26,7 +28,7 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
         std.mem.copy(u8, sdkIncludePath[sdkPath.len..], inc);
 
         exe.addIncludeDir(sdkIncludePath[0..sdkPath.len + inc.len]);
-        exe.addIncludeDir("deps/include/SDL");
+        exe.addIncludeDir("deps/SDL/include/");
         exe.addLibPath("libs");
         b.installBinFile("libs/SDL2.dll", "SDL2.dll");
         exe.linkSystemLibrary("vulkan-1");
@@ -41,6 +43,7 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
 
     try addShader(b, exe, "shader.vert", "vert.spv");
     try addShader(b, exe, "shader.frag", "frag.spv");
+    try addShader(b, exe, "compute_rasterizer.comp", "compute_rasterizer_comp.spv");
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
