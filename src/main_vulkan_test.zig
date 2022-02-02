@@ -3,6 +3,7 @@ const c = @cImport({
     @cInclude("vulkan/vulkan.h");
     @cInclude("SDL.h");
     @cInclude("SDL_vulkan.h");
+    @cInclude("vk_mem_alloc.h");
 });
 
 const print = std.debug.print;
@@ -21,6 +22,7 @@ const WIDTH = 800;
 const HEIGHT = 600;
 
 const MAX_FRAMES_IN_FLIGHT = 2;
+const API_VERSION = c.VK_API_VERSION_1_2;
 
 const enableValidationLayers = std.debug.runtime_safety;
 const validationLayers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
@@ -89,7 +91,12 @@ var imagesInFlightAmount: usize = 0;
 
 
 
+// Testing vma allocator
+var vmaAllocator: c.VmaAllocator = null;
+var inBuffer: c.VkBuffer = null;
+var inBufferAlloc: c.VmaAllocation = null;
 
+var outBuffer: c.VkBuffer = null;
 
 
 
@@ -107,7 +114,7 @@ const VulkanMemory = struct {
     allocations: std.ArrayList(VulkanMemoryAllocation),
     buffer: c.VkBuffer = null,
 
-    pub fn createBuffer(allocator: std.mem.Allocator, usage: c.VkBufferUsageFlags, bufferSize: u32) !VulkanMemory 
+    pub fn createBuffer(allocator: std.mem.Allocator, usage: c.VkBufferUsageFlags, bufferSize: u32) !VulkanMemory
     {
         const bufferInfo = c.VkBufferCreateInfo {
             .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -116,7 +123,7 @@ const VulkanMemory = struct {
             .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
         };
 
-        var vulkanMemory = VulkanMemory{.memorySize = bufferSize, .usageFlags = usage, 
+        var vulkanMemory = VulkanMemory{.memorySize = bufferSize, .usageFlags = usage,
             .allocations = std.ArrayList(VulkanMemoryAllocation).init(allocator) };
 
         try checkSuccess(c.vkCreateBuffer(logicalDevice, &bufferInfo, null, &vulkanMemory.buffer));
@@ -229,6 +236,10 @@ pub fn deinit(allocator : std.mem.Allocator) void
 
     c.vkDestroyRenderPass(logicalDevice, renderPass, null);
 
+
+    c.vmaDestroyBuffer(vmaAllocator, inBuffer, inBufferAlloc);
+    c.vmaDestroyAllocator(vmaAllocator);
+
     c.vkDestroyDevice(logicalDevice, null);
 
     if(enableValidationLayers)
@@ -243,6 +254,7 @@ pub fn deinit(allocator : std.mem.Allocator) void
     c.SDL_DestroyWindow(window);
     c.SDL_Quit();
 }
+
 
 pub fn main() anyerror!void
 {
@@ -276,6 +288,100 @@ pub fn main() anyerror!void
 
 
     try(pickPhysicalDevice(allocator));
+
+
+    {
+
+        const allocatorCreateInfo  =  c.VmaAllocatorCreateInfo{
+            .vulkanApiVersion = API_VERSION,
+            .physicalDevice = physicalDevice,
+            .device = logicalDevice,
+            .instance = instance,
+
+            .flags = c.VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT,
+            .preferredLargeHeapBlockSize = 0,
+            .pAllocationCallbacks = null,
+            .pDeviceMemoryCallbacks = null,
+            .pHeapSizeLimit = 0,
+            .pVulkanFunctions = null,
+            .pTypeExternalMemoryHandleTypes = 0,
+
+        };
+
+        try checkSuccess(c.vmaCreateAllocator(&allocatorCreateInfo, &vmaAllocator));
+
+
+
+
+
+
+
+
+
+
+        // Create in buffer
+
+        const vbInfo = c.VkBufferCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = 1048576,
+            .usage = c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT | c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 1, // NOTICE SET THIS TO 0 OR 2+, CAN CRASH WITH 1
+            .pQueueFamilyIndices = &([_]u32{ 0 }),
+
+            .flags = 0,
+            .pNext = null,
+        };
+
+        const vbAllocCreateInfo = c.VmaAllocationCreateInfo{
+            .usage = c.VMA_MEMORY_USAGE_CPU_ONLY,
+            .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+
+            .requiredFlags = 0,
+            .preferredFlags = 0,
+            .memoryTypeBits = 0,
+            .pool = null,
+            .pUserData = null,
+            .priority = 0.0,
+        };
+
+        var inBufferAllocInfo: c.VmaAllocationInfo = undefined;
+        try checkSuccess(c.vmaCreateBuffer(vmaAllocator, &vbInfo, &vbAllocCreateInfo,
+            &inBuffer, &inBufferAlloc, &inBufferAllocInfo) );
+
+        {
+            var counter: u32 = 0;
+            //var arr = std.mem.bytesAsSlice(u32, .pMappedData[0..]);
+            var arra = @ptrCast([*]u8, inBufferAllocInfo.pMappedData);
+            //var ptr = inBufferAllocInfo.pMappedData;
+            // does this work?
+            while(counter < 1024) : (counter += 1)
+            {
+                //const ptrr = @ptrCast([*]u8, ptr);
+                //@memcpy(@ptrCast([*]u8, &arra[4 * counter]), @ptrCast([*]u8, &counter), 4);
+                @memcpy(arra + 4 * counter, @ptrCast([*]u8, &counter), 4);
+            }
+        }
+
+        var statsString: [*c]u8 = undefined;
+        c.vmaBuildStatsString(vmaAllocator, &statsString, 1);
+        {
+            print("Stats: {s}\n", .{statsString});
+        }
+        c.vmaFreeStatsString(vmaAllocator, statsString);
+
+        //memcpy(stagingVertexBufferAllocInfo.pMappedData, vertices, vertexBufferSize);
+    }
+
+
+
+
+
+
+
+
+
+
 
     try(createSwapchain(allocator));
 
@@ -336,18 +442,18 @@ fn drawFrame(allocator : std.mem.Allocator) !void
     {
         const result = c.vkAcquireNextImageKHR(logicalDevice, swapChain, std.math.maxInt(u64), imageAvailableSemaphores[currentFrame], null, &imageIndex);
 
-        if (result == c.VK_ERROR_OUT_OF_DATE_KHR) 
+        if (result == c.VK_ERROR_OUT_OF_DATE_KHR)
         {
             try recreateSwapchain(allocator);
             return;
-        } 
-        else if (result != c.VK_SUCCESS and result != c.VK_SUBOPTIMAL_KHR) 
+        }
+        else if (result != c.VK_SUCCESS and result != c.VK_SUBOPTIMAL_KHR)
         {
             return error.FailedToAquireSwapchainImage;
         }
     }
 
-    if (imagesInFlight[imageIndex] != null) 
+    if (imagesInFlight[imageIndex] != null)
     {
         try checkSuccess(c.vkWaitForFences(logicalDevice, 1, &imagesInFlight[imageIndex], c.VK_TRUE, std.math.maxInt(u64)));
     }
@@ -377,7 +483,7 @@ fn drawFrame(allocator : std.mem.Allocator) !void
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
-        
+
         const viewPort = c.VkViewport{ .x = 0.0, .y = 0.0, .width = @intToFloat(f32, swapchainImageSize.width), .height = @intToFloat(f32, swapchainImageSize.height), .minDepth = 0.0, .maxDepth = 1.0 };
         const scissors = c.VkRect2D{ .offset = c.VkOffset2D{ .x = 0, .y = 0 }, .extent = swapchainImageSize };
 
@@ -406,7 +512,7 @@ fn drawFrame(allocator : std.mem.Allocator) !void
 
     const signalSemaphores = [_]c.VkSemaphore{renderFinishedSemaphores[currentFrame]};
 
-   
+
     var submitInfo = [_]c.VkSubmitInfo{c.VkSubmitInfo{
         .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
@@ -443,11 +549,11 @@ fn drawFrame(allocator : std.mem.Allocator) !void
     {
         const result = c.vkQueuePresentKHR(presentQueue, &presentInfo);
 
-        if (result == c.VK_ERROR_OUT_OF_DATE_KHR or result == c.VK_SUBOPTIMAL_KHR or resized) 
+        if (result == c.VK_ERROR_OUT_OF_DATE_KHR or result == c.VK_SUBOPTIMAL_KHR or resized)
         {
             try recreateSwapchain(allocator);
         }
-        else if (result != c.VK_SUCCESS) 
+        else if (result != c.VK_SUCCESS)
         {
             return error.FailedToPresentSwapchainImage;
         }
@@ -513,7 +619,7 @@ fn beginSingleTimeCommands(commandPool: c.VkCommandPool, commandBuffer: c.VkComm
 {
      try checkSuccess(c.vkResetCommandPool(logicalDevice, commandPool, 0));
 
-    const beginInfo = c.VkCommandBufferBeginInfo { 
+    const beginInfo = c.VkCommandBufferBeginInfo {
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = null,
@@ -831,7 +937,7 @@ fn createGraphicsPipeline() !void
     };
 
     //const dynamicStates = ;
-//    
+//
 //    typedef struct VkPipelineDynamicStateCreateInfo {
 //    VkStructureType   sType;
 //    const  void *             pNext;
@@ -841,7 +947,7 @@ fn createGraphicsPipeline() !void
 //} VkPipelineDynamicStateCreateInfo;
 
     const dynamicStates = [_]c.VkDynamicState{ c.VK_DYNAMIC_STATE_VIEWPORT, c.VK_DYNAMIC_STATE_SCISSOR };
-    const dynamicStateInfo = c.VkPipelineDynamicStateCreateInfo{ 
+    const dynamicStateInfo = c.VkPipelineDynamicStateCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = dynamicStates.len,
         .pDynamicStates = &dynamicStates,
@@ -971,7 +1077,7 @@ fn createInstance(allocator: std.mem.Allocator) anyerror!void
         .applicationVersion = c.VK_MAKE_VERSION(0, 0, 1),
         .pEngineName = "No Engine",
         .engineVersion = c.VK_MAKE_VERSION(0, 0, 1),
-        .apiVersion = c.VK_API_VERSION_1_2,
+        .apiVersion = API_VERSION,
         .pNext = null,
     };
 
@@ -1303,7 +1409,7 @@ fn pickPhysicalDevice(allocator: std.mem.Allocator) anyerror!void
 fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
 {
     resized = false;
- 
+
     var formatCount: u32 = 0;
     try checkSuccess(c.vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, null));
 
@@ -1401,7 +1507,7 @@ fn createSwapchain(allocator: std.mem.Allocator) anyerror !void
 
             .imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 0, // NOTICE SET THIS TO 0 OR 2+, CAN CRASH WITH 1
-            .pQueueFamilyIndices = &([_]u32{ 0, 0 }),
+            .pQueueFamilyIndices = &([_]u32{ 0 }),
 
             .preTransform = capabilities.currentTransform,
             .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,

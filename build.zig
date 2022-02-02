@@ -15,6 +15,7 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
 
     // Sources
     exe.addCSourceFile("deps/glad/src/glad.c", &[_][]const u8{"-std=c99"});
+    exe.addCSourceFile("deps/VulkanMemoryAllocator/vma.cpp", &[_][]const u8{"-std=c++14"});
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
@@ -39,6 +40,8 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
     }
     exe.linkSystemLibrary("sdl2");
     exe.linkLibC();
+    // For vma
+    exe.linkLibCpp();
     exe.install();
 
     try addShader(b, exe, "shader.vert", "vert.spv");
