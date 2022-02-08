@@ -329,7 +329,7 @@ fn createDescriptorSets(layout: c.VkDescriptorSetLayout) anyerror!void
     const bufferInfo = c.VkDescriptorBufferInfo {
         .buffer = inBuffer,
         .offset = 0,
-        .range = @sizeOf(Vertex) * 3,
+        .range = @sizeOf(Vertex) * 6,
     };
 
     const descriptorWrite = c.VkWriteDescriptorSet {
@@ -443,7 +443,7 @@ pub fn main() anyerror!void
             &inBuffer, &inBufferAlloc, &inBufferAllocInfo) );
 
         {
-            var counter: u32 = @sizeOf(Vertex) * 3;
+            var counter: u32 = @sizeOf(Vertex) * 6;
             //var arr = std.mem.bytesAsSlice(u32, .pMappedData[0..]);
             var arra = @ptrCast([*]u8, inBufferAllocInfo.pMappedData);
             //var ptr = inBufferAllocInfo.pMappedData;
@@ -456,12 +456,20 @@ pub fn main() anyerror!void
             }
 
             const v0 = Vertex{ .pos = .{ -1.0,  1.0, 0.5 }, .col = utils.getColor256( 255,   0,   0, 255 ) };
-            const v1 = Vertex{ .pos = .{  0.0, -0.5, 0.5 }, .col = utils.getColor256(   0, 255,   0, 255 ) };
-            const v2 = Vertex{ .pos = .{  0.5,  1.0, 0.5 }, .col = utils.getColor256(   0,   0, 255, 255 ) };
+            const v1 = Vertex{ .pos = .{ -0.5, -0.5, 0.5 }, .col = utils.getColor256(   0, 255,   0, 255 ) };
+            const v2 = Vertex{ .pos = .{  0.0,  1.0, 0.5 }, .col = utils.getColor256(   0,   0, 255, 255 ) };
+
+            const v3 = Vertex{ .pos = .{  0.0,  1.0, 0.5 }, .col = utils.getColor256( 255,   0,   0, 255 ) };
+            const v4 = Vertex{ .pos = .{ 0.25, -0.5, 0.5 }, .col = utils.getColor256(   0, 255,   0, 255 ) };
+            const v5 = Vertex{ .pos = .{  0.5,  1.0, 0.5 }, .col = utils.getColor256(   0,   0, 255, 255 ) };
 
             @memcpy(arra + 0 * @sizeOf(Vertex), @ptrCast([*]const u8, &v0), @sizeOf(Vertex) );
             @memcpy(arra + 1 * @sizeOf(Vertex), @ptrCast([*]const u8, &v1), @sizeOf(Vertex) );
             @memcpy(arra + 2 * @sizeOf(Vertex), @ptrCast([*]const u8, &v2), @sizeOf(Vertex) );
+
+            @memcpy(arra + 3 * @sizeOf(Vertex), @ptrCast([*]const u8, &v3), @sizeOf(Vertex) );
+            @memcpy(arra + 4 * @sizeOf(Vertex), @ptrCast([*]const u8, &v4), @sizeOf(Vertex) );
+            @memcpy(arra + 5 * @sizeOf(Vertex), @ptrCast([*]const u8, &v5), @sizeOf(Vertex) );
 
 
         }
@@ -601,7 +609,7 @@ fn drawFrame(allocator : std.mem.Allocator) !void
         c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
         c.vkCmdBindDescriptorSets(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, null);
-        c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        c.vkCmdDraw(commandBuffer, 6, 1, 0, 0);
     }
     c.vkCmdEndRenderPass(commandBuffer);
 

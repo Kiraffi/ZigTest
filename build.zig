@@ -1,8 +1,6 @@
 const std = @import("std");
 
-
-
-fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zigFile: []const u8,
+fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, stpes: []const *std.build.RunStep, name: []const u8, zigFile: []const u8,
     target: std.zig.CrossTarget, mode: std.builtin.Mode, runnable: bool, testable: bool) anyerror !void
 {
     // to keep this debuggale from vscode without having to figure out some way to push the launch.json
@@ -10,8 +8,6 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
     const sglOutput: []const u8 = "sdl_ogl";
     const outputFile = if(runnable) sglOutput else name;
     const exe = b.addExecutable(outputFile, zigFile);
-    // Includes
-    exe.addIncludeDir("deps/include");
 
     // Sources
     exe.addCSourceFile("deps/glad/src/glad.c", &[_][]const u8{"-std=c99"});
@@ -23,14 +19,22 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
     exe.addIncludeDir("deps/VulkanMemoryAllocator/include/");
     if (exe.target.isWindows())
     {
-        var sdkIncludePath = std.mem.zeroes([1024]u8);
-        std.mem.copy(u8, &sdkIncludePath, sdkPath);
-        const inc = "/Include";
-        std.mem.copy(u8, sdkIncludePath[sdkPath.len..], inc);
+        var sdkPathAdd = std.mem.zeroes([1024]u8);
+        std.mem.copy(u8, &sdkPathAdd, sdkPath);
 
-        exe.addIncludeDir(sdkIncludePath[0..sdkPath.len + inc.len]);
-        exe.addIncludeDir("deps/SDL/include/");
+        // Vulkansdk/Include
+        const inc = "/Include";
+        std.mem.copy(u8, sdkPathAdd[sdkPath.len..], inc);
+        exe.addIncludeDir(sdkPathAdd[0..sdkPath.len + inc.len]);
+        
+        // Vulkansdk/Lib
+        const libPath = "/Lib";
+        std.mem.copy(u8, sdkPathAdd[sdkPath.len..], libPath);
+        exe.addLibPath(sdkPathAdd[0..sdkPath.len + libPath.len]);
+        
+        // Has sdl2
         exe.addLibPath("libs");
+        exe.addIncludeDir("deps/SDL/include/");
         b.installBinFile("libs/SDL2.dll", "SDL2.dll");
         exe.linkSystemLibrary("vulkan-1");
     }
@@ -44,9 +48,8 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, name: []const u8, zig
     exe.linkLibCpp();
     exe.install();
 
-    try addShader(b, exe, "shader.vert", "vert.spv");
-    try addShader(b, exe, "shader.frag", "frag.spv");
-    try addShader(b, exe, "compute_rasterizer.comp", "compute_rasterizer_comp.spv");
+    for(stpes) |step|
+        exe.step.dependOn(&step.step);
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
@@ -98,6 +101,13 @@ pub fn build(b: *std.build.Builder) anyerror!void
         std.debug.print("Vulkan path: {s}\n", .{sdkPath});
     }
 
+    const shaderCompilationSteps = [_]*std.build.RunStep {
+        // This shader compilation shuold be done only once per build, not once per exe.
+        try addShader(b, "shader.vert", "vert.spv"),
+        try addShader(b, "shader.frag", "frag.spv"),
+        try addShader(b, "compute_rasterizer.comp", "compute_rasterizer_comp.spv")
+    };
+
     //try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, false, false));
     //try(buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, false, false));
 
@@ -106,12 +116,12 @@ pub fn build(b: *std.build.Builder) anyerror!void
     //try(buildTarget(sdkPath, b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false));
     //try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, true, false));
 
-    try(buildTarget(sdkPath, b, "zigmain", "src/main_vulkan_test.zig", target, mode, true, false));
+    try(buildTarget(sdkPath, b, shaderCompilationSteps[0..], "zigmain", "src/main_vulkan_test.zig", target, mode, true, false));
 
 }
 
 
-fn addShader(b: *std.build.Builder, exe: anytype, in_file: []const u8, out_file: []const u8) !void
+fn addShader(b: *std.build.Builder, in_file: []const u8, out_file: []const u8) !*std.build.RunStep
 {
     // example:
     // glslc -o shaders/vert.spv shaders/shader.vert
@@ -126,5 +136,5 @@ fn addShader(b: *std.build.Builder, exe: anytype, in_file: []const u8, out_file:
         "-o",
         full_out,
     });
-    exe.step.dependOn(&run_cmd.step);
+    return run_cmd;
 }
