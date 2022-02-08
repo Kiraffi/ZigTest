@@ -110,7 +110,7 @@ pub const Engine = struct
             previousTime = self.totalNanos;
         }
 
-        if(!flipHappened or !self.vsync)
+        if(!flipHappened)// or !self.vsync)
         {
             // windows timeBeginPeriod?
             c.SDL_Delay(1);

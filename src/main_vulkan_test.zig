@@ -6,6 +6,8 @@ const c = @cImport({
     @cInclude("vk_mem_alloc.h");
 });
 
+const utils = @import("utils.zig");
+
 const print = std.debug.print;
 const panic = std.debug.panic;
 
@@ -98,6 +100,12 @@ var inBufferAlloc: c.VmaAllocation = null;
 
 var outBuffer: c.VkBuffer = null;
 
+
+
+
+var descriptorPool: c.VkDescriptorPool = null;
+var descriptorSetLayout: c.VkDescriptorSetLayout = null;
+var descriptorSet: c.VkDescriptorSet = null;
 
 
 const VulkanMemoryAllocation = struct {
@@ -229,8 +237,9 @@ pub fn deinit(allocator : std.mem.Allocator) void
     }
     //allocator.free(commandBuffers);
 
-
-
+    c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
+    c.vkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
+    
     c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
     c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
 
@@ -255,6 +264,90 @@ pub fn deinit(allocator : std.mem.Allocator) void
     c.SDL_Quit();
 }
 
+const Vertex = extern struct
+{
+    // Math.Vec3 uses 16 bytes
+    pos: [3]f32 = .{0.0, 0.0, 0.0},
+    col: u32 = 0,
+};
+
+fn createDescriptorSetLayout() anyerror!void
+{
+    const setLayoutBinding = c.VkDescriptorSetLayoutBinding {
+        .binding = 0,
+        .descriptorCount = 1,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
+        .pImmutableSamplers = null,
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    };
+
+    const layoutInfo = c.VkDescriptorSetLayoutCreateInfo {
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &setLayoutBinding,
+        .flags = 0,
+        .pNext = null,
+
+    };
+        
+    try(checkSuccess(c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorSetLayout)));
+
+}
+
+fn createDescriptorPool() anyerror!void
+{
+    const poolSize = c.VkDescriptorPoolSize{
+        .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+    };
+
+    const poolInfo = c.VkDescriptorPoolCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = 1,
+        .pPoolSizes = &poolSize,
+        .maxSets = 32,
+        .flags = 0,
+        .pNext = null,
+    } ;
+
+    try(checkSuccess(c.vkCreateDescriptorPool(logicalDevice, &poolInfo, null, &descriptorPool)));
+}
+
+fn createDescriptorSets(layout: c.VkDescriptorSetLayout) anyerror!void
+{
+    const allocInfo = c.VkDescriptorSetAllocateInfo {
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &layout, // array
+        .pNext = null,
+    };
+
+    // descriptorset should be an array of descriptorsets
+    try(checkSuccess(c.vkAllocateDescriptorSets(logicalDevice, &allocInfo, &descriptorSet)));
+
+    const bufferInfo = c.VkDescriptorBufferInfo {
+        .buffer = inBuffer,
+        .offset = 0,
+        .range = @sizeOf(Vertex) * 3,
+    };
+
+    const descriptorWrite = c.VkWriteDescriptorSet {
+        .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorSet,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+        .pBufferInfo = &bufferInfo,
+
+        .pImageInfo = null,
+        .pTexelBufferView = null,
+        .pNext = null,
+    };
+
+     c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+}
 
 pub fn main() anyerror!void
 {
@@ -326,15 +419,15 @@ pub fn main() anyerror!void
             .size = 1048576,
             .usage = c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT | c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 1, // NOTICE SET THIS TO 0 OR 2+, CAN CRASH WITH 1
-            .pQueueFamilyIndices = &([_]u32{ 0 }),
+            .queueFamilyIndexCount = 1,
+            .pQueueFamilyIndices = &([_]u32{ graphicsIndex }),
 
             .flags = 0,
             .pNext = null,
         };
 
         const vbAllocCreateInfo = c.VmaAllocationCreateInfo{
-            .usage = c.VMA_MEMORY_USAGE_CPU_ONLY,
+            .usage = c.VMA_MEMORY_USAGE_CPU_TO_GPU ,  // c.VMA_MEMORY_USAGE_CPU_ONLY, should use this for staging.
             .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
 
             .requiredFlags = 0,
@@ -350,17 +443,27 @@ pub fn main() anyerror!void
             &inBuffer, &inBufferAlloc, &inBufferAllocInfo) );
 
         {
-            var counter: u32 = 0;
+            var counter: u32 = @sizeOf(Vertex) * 3;
             //var arr = std.mem.bytesAsSlice(u32, .pMappedData[0..]);
             var arra = @ptrCast([*]u8, inBufferAllocInfo.pMappedData);
             //var ptr = inBufferAllocInfo.pMappedData;
             // does this work?
-            while(counter < 1024) : (counter += 1)
+            while(counter < 1024 * 1024 / 4) : (counter += 1)
             {
                 //const ptrr = @ptrCast([*]u8, ptr);
                 //@memcpy(@ptrCast([*]u8, &arra[4 * counter]), @ptrCast([*]u8, &counter), 4);
                 @memcpy(arra + 4 * counter, @ptrCast([*]u8, &counter), 4);
             }
+
+            const v0 = Vertex{ .pos = .{ -1.0,  1.0, 0.5 }, .col = utils.getColor256( 255,   0,   0, 255 ) };
+            const v1 = Vertex{ .pos = .{  0.0, -0.5, 0.5 }, .col = utils.getColor256(   0, 255,   0, 255 ) };
+            const v2 = Vertex{ .pos = .{  0.5,  1.0, 0.5 }, .col = utils.getColor256(   0,   0, 255, 255 ) };
+
+            @memcpy(arra + 0 * @sizeOf(Vertex), @ptrCast([*]const u8, &v0), @sizeOf(Vertex) );
+            @memcpy(arra + 1 * @sizeOf(Vertex), @ptrCast([*]const u8, &v1), @sizeOf(Vertex) );
+            @memcpy(arra + 2 * @sizeOf(Vertex), @ptrCast([*]const u8, &v2), @sizeOf(Vertex) );
+
+
         }
 
         var statsString: [*c]u8 = undefined;
@@ -384,6 +487,10 @@ pub fn main() anyerror!void
 
 
     try(createSwapchain(allocator));
+    
+    try(createDescriptorSetLayout());
+    try(createDescriptorPool());
+    try(createDescriptorSets(descriptorSetLayout));
 
     try(createRenderPass());
 
@@ -492,6 +599,8 @@ fn drawFrame(allocator : std.mem.Allocator) !void
         c.vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
 
         c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+        c.vkCmdBindDescriptorSets(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, null);
         c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     }
     c.vkCmdEndRenderPass(commandBuffer);
@@ -928,11 +1037,11 @@ fn createGraphicsPipeline() !void
 
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
         .pushConstantRangeCount = 0,
         .pNext = null,
         .flags = 0,
-        .pSetLayouts = null,
+        .setLayoutCount = 1, //0,
+        .pSetLayouts = &descriptorSetLayout ,// null,
         .pPushConstantRanges = null,
     };
 
