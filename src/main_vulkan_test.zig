@@ -70,6 +70,7 @@ var presentIndex: u32 = ~@as(u32, 0);
 //var uniqueQueues: u32 = 0;
 
 
+
 var swapChainImages: []c.VkImage = undefined;
 var swapChain: c.VkSwapchainKHR = null;
 var swapChainImageViews: []c.VkImageView = undefined;
@@ -100,93 +101,16 @@ var inBufferAlloc: c.VmaAllocation = null;
 
 var outBuffer: c.VkBuffer = null;
 
-
+var computePipelineLayout: c.VkPipelineLayout = null;
+var computeDescriptorPool: c.VkDescriptorPool = null;
+var computeDescriptorSetLayout: c.VkDescriptorSetLayout = null;
+var computeDescriptorSet: c.VkDescriptorSet = null;
+var computePipeline: c.VkPipeline = null;
 
 
 var descriptorPool: c.VkDescriptorPool = null;
 var descriptorSetLayout: c.VkDescriptorSetLayout = null;
 var descriptorSet: c.VkDescriptorSet = null;
-
-
-const VulkanMemoryAllocation = struct {
-    pos: u32 = 0,
-    size: u32 = 0,
-    memoryProperties: c.VkMemoryPropertyFlags,
-    deviceMemory: c.VkDeviceMemory = null,
-};
-
-const VulkanMemory = struct {
-    memorySize: u32 = 0,
-    used: u32 = 0,
-    usageFlags: c.VkBufferUsageFlags,
-    allocations: std.ArrayList(VulkanMemoryAllocation),
-    buffer: c.VkBuffer = null,
-
-    pub fn createBuffer(allocator: std.mem.Allocator, usage: c.VkBufferUsageFlags, bufferSize: u32) !VulkanMemory
-    {
-        const bufferInfo = c.VkBufferCreateInfo {
-            .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .size = bufferSize,
-            .usage = usage,
-            .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-        };
-
-        var vulkanMemory = VulkanMemory{.memorySize = bufferSize, .usageFlags = usage,
-            .allocations = std.ArrayList(VulkanMemoryAllocation).init(allocator) };
-
-        try checkSuccess(c.vkCreateBuffer(logicalDevice, &bufferInfo, null, &vulkanMemory.buffer));
-        return vulkanMemory;
-    }
-
-    pub fn deinit(self: *VulkanMemory) void
-    {
-        for(self.allocations.items) |alloc|
-            c.vkFreeMemory(logicalDevice, alloc.deviceMemory, null);
-
-        c.vkDestroyBuffer(logicalDevice, self.buffer, null);
-        self.allocations.deinit();
-    }
-
-    pub fn createAllocation(self: *VulkanMemory, allocationSize: u32, memoryProperties: c.VkMemoryPropertyFlags) !VulkanMemoryAllocation
-    {
-        var memRequirements: c.VkMemoryRequirements = undefined;
-        c.vkGetBufferMemoryRequirements(logicalDevice, self, &memRequirements);
-
-        if(allocationSize > memRequirements.size or allocationSize + self.used > self.memorySize)
-            return error.NoMemoryForAllocation;
-
-        const allocInfo = c.VkMemoryAllocateInfo {
-            .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .allocationSize = memRequirements.size,
-            .memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, memoryProperties),
-        };
-        var allocation = VulkanMemoryAllocation {.pos = self.used, .size = allocationSize, .memoryProperties = memoryProperties };
-        try checkSuccess(c.vkAllocateMemory(logicalDevice, &allocInfo, null, &allocation.deviceMemory));
-
-        try self.allocations.append(allocation);
-        return allocation;
-    }
-};
-
-
-
-var deviceOnlyMemory: VulkanMemory = undefined;
-
-
-fn findMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
-{
-    var memProperties: c.VkPhysicalDeviceMemoryProperties = undefined;
-    c.vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-    var i: u32 = 0;
-    while(i < memProperties.memoryTypeCount) : (i += 1 )
-    {
-        if ((typeFilter & (1 << i)) != 0 and (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-        {
-            return i;
-        }
-    }
-    return error.NoAppropriateMemoryTypeFound;
-}
 
 
 fn debugCallback(messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, messageType: c.VkDebugUtilsMessageTypeFlagsEXT,
@@ -221,7 +145,6 @@ fn cleanupSwapchain(allocator: std.mem.Allocator) !void
 
 pub fn deinit(allocator : std.mem.Allocator) void
 {
-    deviceOnlyMemory.deinit();
     if(swapChain != null)
         try cleanupSwapchain(allocator);
     if(swapChain != null)
@@ -239,7 +162,12 @@ pub fn deinit(allocator : std.mem.Allocator) void
 
     c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
     c.vkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
-    
+
+    c.vkDestroyDescriptorSetLayout(logicalDevice, computeDescriptorSetLayout, null);
+
+    c.vkDestroyPipeline(logicalDevice, computePipeline, null);
+    c.vkDestroyPipelineLayout(logicalDevice, computePipelineLayout, null);
+
     c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
     c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
 
@@ -271,14 +199,14 @@ const Vertex = extern struct
     col: u32 = 0,
 };
 
-fn createDescriptorSetLayout() anyerror!void
+fn createDescriptorSetLayout(stage: c.VkShaderStageFlags) anyerror!c.VkDescriptorSetLayout
 {
     const setLayoutBinding = c.VkDescriptorSetLayoutBinding {
         .binding = 0,
         .descriptorCount = 1,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .pImmutableSamplers = null,
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+        .stageFlags = stage,
     };
 
     const layoutInfo = c.VkDescriptorSetLayoutCreateInfo {
@@ -289,9 +217,10 @@ fn createDescriptorSetLayout() anyerror!void
         .pNext = null,
 
     };
-        
-    try(checkSuccess(c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorSetLayout)));
 
+    var layout: c.VkDescriptorSetLayout = undefined;
+    try(checkSuccess(c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &layout)));
+    return layout;
 }
 
 fn createDescriptorPool() anyerror!void
@@ -474,13 +403,15 @@ pub fn main() anyerror!void
 
         }
 
-        var statsString: [*c]u8 = undefined;
-        c.vmaBuildStatsString(vmaAllocator, &statsString, 1);
+        if(false)
         {
-            print("Stats: {s}\n", .{statsString});
+            var statsString: [*c]u8 = undefined;
+            c.vmaBuildStatsString(vmaAllocator, &statsString, 1);
+            {
+                print("Stats: {s}\n", .{statsString});
+            }
+            c.vmaFreeStatsString(vmaAllocator, statsString);
         }
-        c.vmaFreeStatsString(vmaAllocator, statsString);
-
         //memcpy(stagingVertexBufferAllocInfo.pMappedData, vertices, vertexBufferSize);
     }
 
@@ -495,8 +426,9 @@ pub fn main() anyerror!void
 
 
     try(createSwapchain(allocator));
-    
-    try(createDescriptorSetLayout());
+
+    descriptorSetLayout = try(createDescriptorSetLayout(c.VK_SHADER_STAGE_VERTEX_BIT));
+    computeDescriptorSetLayout = try(createDescriptorSetLayout(c.VK_SHADER_STAGE_COMPUTE_BIT));
     try(createDescriptorPool());
     try(createDescriptorSets(descriptorSetLayout));
 
@@ -504,6 +436,7 @@ pub fn main() anyerror!void
 
     try(createGraphicsPipeline());
 
+    try(createComputePipeline());
 
     try createFramebuffers(allocator);
     try createCommandPoolsAndBuffers();
@@ -911,6 +844,51 @@ fn createShaderModule(code: []align(@alignOf(u32)) const u8) !c.VkShaderModule
     try checkSuccess(c.vkCreateShaderModule(logicalDevice, &createInfo, null, &shaderModule));
 
     return shaderModule;
+}
+
+
+fn createComputePipeline() !void
+{
+    const compShaderCode align(4) = @embedFile("../data/shader/compute.spv").*;
+
+    const compShaderModule = try createShaderModule(&compShaderCode);
+
+    const compShaderStageInfo = c.VkPipelineShaderStageCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = c.VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = compShaderModule,
+        .pName = "main",
+
+        .pNext = null,
+        .flags = 0,
+        .pSpecializationInfo = null,
+    };
+
+    const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pushConstantRangeCount = 0,
+        .pNext = null,
+        .flags = 0,
+        .setLayoutCount = 1, //0,
+        .pSetLayouts = &computeDescriptorSetLayout ,// null,
+        .pPushConstantRanges = null,
+    };
+
+    try checkSuccess(c.vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, null, &computePipelineLayout));
+
+    const computePipelineCreateInfo = c.VkComputePipelineCreateInfo {
+        .sType = c.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = compShaderStageInfo,
+        .layout = pipelineLayout,
+        .basePipelineHandle = null,
+        .basePipelineIndex = 0,
+        .flags = 0,
+        .pNext = null,
+    };
+
+    try checkSuccess(c.vkCreateComputePipelines(logicalDevice, null, 1, &computePipelineCreateInfo, null, &computePipeline));
+
+    c.vkDestroyShaderModule(logicalDevice, compShaderModule, null);
 }
 
 fn createGraphicsPipeline() !void

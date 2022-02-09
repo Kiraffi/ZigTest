@@ -26,12 +26,12 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, stpes: []const *std.b
         const inc = "/Include";
         std.mem.copy(u8, sdkPathAdd[sdkPath.len..], inc);
         exe.addIncludeDir(sdkPathAdd[0..sdkPath.len + inc.len]);
-        
+
         // Vulkansdk/Lib
         const libPath = "/Lib";
         std.mem.copy(u8, sdkPathAdd[sdkPath.len..], libPath);
         exe.addLibPath(sdkPathAdd[0..sdkPath.len + libPath.len]);
-        
+
         // Has sdl2
         exe.addLibPath("libs");
         exe.addIncludeDir("deps/SDL/include/");
@@ -105,7 +105,8 @@ pub fn build(b: *std.build.Builder) anyerror!void
         // This shader compilation shuold be done only once per build, not once per exe.
         try addShader(b, "shader.vert", "vert.spv"),
         try addShader(b, "shader.frag", "frag.spv"),
-        try addShader(b, "compute_rasterizer.comp", "compute_rasterizer_comp.spv")
+        try addShader(b, "compute_rasterizer.comp", "compute_rasterizer_comp.spv"),
+        try addShader(b, "compute.comp", "compute.spv"),
     };
 
     //try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, false, false));
