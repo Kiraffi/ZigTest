@@ -173,7 +173,8 @@ pub fn deinit(allocator : std.mem.Allocator) void
 
     c.vkDestroyRenderPass(logicalDevice, renderPass, null);
 
-
+    renderTargetImage.deInit();
+     
     c.vmaDestroyBuffer(vmaAllocator, inBuffer, inBufferAlloc);
     c.vmaDestroyAllocator(vmaAllocator);
 
@@ -192,76 +193,91 @@ pub fn deinit(allocator : std.mem.Allocator) void
     c.SDL_Quit();
 }
 
-const Image = struct {
+pub const Image = struct 
+{
     w: u32,
     h: u32,
     image: c.VkImage = null,
     view: c.VkImageView = null,
     alloc: c.VmaAllocation = null,
+
+    pub fn create(width: u32, height: u32,  format: c.VkFormat, usage: c.VkImageUsageFlags,
+        aspectMask: c.VkImageAspectFlags, memoryUsage: c.VmaMemoryUsage ) !Image
+    {
+
+        const createInfo = c.VkImageCreateInfo {
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = c.VK_IMAGE_TYPE_2D,
+            .format = format,
+            .extent = c.VkExtent3D{ .width = width, .height = height, .depth = 1 },
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = c.VK_SAMPLE_COUNT_1_BIT,
+            .tiling = c.VK_IMAGE_TILING_OPTIMAL,
+            .usage = usage,
+            .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+
+            .queueFamilyIndexCount = 1,
+            .pQueueFamilyIndices = &graphicsIndex,
+            .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+            
+            .flags = 0,
+            .pNext = null,
+        };
+
+        const allocCreateInfo = c.VmaAllocationCreateInfo{
+            .usage = memoryUsage, //c.VMA_MEMORY_USAGE_GPU_ONLY ,  // c.VMA_MEMORY_USAGE_CPU_ONLY, should use this for staging.
+            .flags = 0,
+
+            .requiredFlags = 0,
+            .preferredFlags = 0,
+            .memoryTypeBits = 0,
+            .pool = null,
+            .pUserData = null,
+            .priority = 0.0,
+        };
+        var image = Image {.w = width, .h = height };
+        try(checkSuccess(c.vmaCreateImage(vmaAllocator, &createInfo, &allocCreateInfo, &image.image, &image.alloc, null) ));
+
+
+
+        const createViewInfo = c.VkImageViewCreateInfo { 
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = image.image,
+            .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+            .format = format,
+
+            .components = .{ 
+                .r = c.VK_COMPONENT_SWIZZLE_R, // VK_COMPONENT_SWIZZLE_IDENTITY;
+                .g = c.VK_COMPONENT_SWIZZLE_G, //VK_COMPONENT_SWIZZLE_IDENTITY;
+                .b = c.VK_COMPONENT_SWIZZLE_B, //VK_COMPONENT_SWIZZLE_IDENTITY;
+                .a = c.VK_COMPONENT_SWIZZLE_A, //VK_COMPONENT_SWIZZLE_IDENTITY;
+            }, 
+            .subresourceRange = .{ 
+                .aspectMask = aspectMask,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .flags = 0,
+            .pNext = null,
+        };
+
+
+        try(checkSuccess(c.vkCreateImageView(logicalDevice, &createViewInfo, null, &image.view)));
+
+        return image;
+    }
+
+
+    pub fn deInit(self: *Image) void
+    {
+        c.vkDestroyImageView(logicalDevice, self.view, null);
+        c.vmaDestroyImage(vmaAllocator, self.image, self.alloc);
+    }
 };
 
-pub fn createImage(width: u32, height: u32,  format: c.VkFormat, usage: c.VkImageUsageFlags,
-    aspectMask: c.VkImageAspectFlags, memoryUsage: c.VmaMemoryUsage ) !Image
-{
-
-    const createInfo = c.VkImageCreateInfo {
-        .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = c.VK_IMAGE_TYPE_2D,
-        .format = format,
-        .extent = c.VkExtent3D{ .width = width, .height = height, .depth = 1 },
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = c.VK_SAMPLE_COUNT_1_BIT,
-        .tiling = c.VK_IMAGE_TILING_OPTIMAL,
-        .usage = usage,
-        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .queueFamilyIndexCount = 1,
-        .pQueueFamilyIndices = &graphicsIndex,
-    };
-
-    const allocCreateInfo = c.VmaAllocationCreateInfo{
-        .usage = memoryUsage, //c.VMA_MEMORY_USAGE_GPU_ONLY ,  // c.VMA_MEMORY_USAGE_CPU_ONLY, should use this for staging.
-        .flags = 0,
-
-        .requiredFlags = 0,
-        .preferredFlags = 0,
-        .memoryTypeBits = 0,
-        .pool = null,
-        .pUserData = null,
-        .priority = 0.0,
-    };
-    var image = Image {.w = width, .h = height };
-    try(checkSuccess(c.vmaCreateImage(vmaAllocator, &createInfo, &allocCreateInfo, &image.image, &image.alloc, null) ));
-
-
-
-	VkImageViewCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-	createInfo.image = image;
-	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	createInfo.format = format;
-
-	createInfo.components.r = VK_COMPONENT_SWIZZLE_R; // VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.g = VK_COMPONENT_SWIZZLE_G; //VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.b = VK_COMPONENT_SWIZZLE_B; //VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.a = VK_COMPONENT_SWIZZLE_A; //VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.subresourceRange.aspectMask = aspectMask;
-	createInfo.subresourceRange.baseMipLevel = 0;
-	createInfo.subresourceRange.levelCount = 1;
-	createInfo.subresourceRange.baseArrayLayer = 0;
-	createInfo.subresourceRange.layerCount = 1;
-
-
-	VkImageView view = 0;
-	VK_CHECK(vkCreateImageView(device, &createInfo, nullptr, &view));
-
-	ASSERT(view);
-	return view;
-}
-
-
-
-    return image;
-}
 
 
 const Vertex = extern struct
@@ -500,10 +516,9 @@ pub fn main() anyerror!void
 
 
 
-    renderTargetImage = try(createImage(800, 600, deviceWithQueues.colorFormat,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-        //| VK_IMAGE_USAGE_STORAGE_BIT
-        , VK_IMAGE_ASPECT_COLOR_BIT,
+    renderTargetImage = try(Image.create(800, 600, c.VK_FORMAT_R8G8B8A8_UNORM,
+        c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT | c.VK_IMAGE_USAGE_STORAGE_BIT,
+        c.VK_IMAGE_ASPECT_COLOR_BIT,
         c.VMA_MEMORY_USAGE_GPU_ONLY));
 
 
