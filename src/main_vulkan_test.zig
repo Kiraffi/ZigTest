@@ -92,7 +92,7 @@ var imagesInFlight: [IMAGES_IN_FLIGHT_MAX]c.VkFence = undefined;
 var imagesInFlightAmount: usize = 0;
 
 
-
+var renderTargetImage: Image = undefined;
 
 // Testing vma allocator
 var vmaAllocator: c.VmaAllocator = null;
@@ -192,6 +192,78 @@ pub fn deinit(allocator : std.mem.Allocator) void
     c.SDL_Quit();
 }
 
+const Image = struct {
+    w: u32,
+    h: u32,
+    image: c.VkImage = null,
+    view: c.VkImageView = null,
+    alloc: c.VmaAllocation = null,
+};
+
+pub fn createImage(width: u32, height: u32,  format: c.VkFormat, usage: c.VkImageUsageFlags,
+    aspectMask: c.VkImageAspectFlags, memoryUsage: c.VmaMemoryUsage ) !Image
+{
+
+    const createInfo = c.VkImageCreateInfo {
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = c.VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = c.VkExtent3D{ .width = width, .height = height, .depth = 1 },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .tiling = c.VK_IMAGE_TILING_OPTIMAL,
+        .usage = usage,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .queueFamilyIndexCount = 1,
+        .pQueueFamilyIndices = &graphicsIndex,
+    };
+
+    const allocCreateInfo = c.VmaAllocationCreateInfo{
+        .usage = memoryUsage, //c.VMA_MEMORY_USAGE_GPU_ONLY ,  // c.VMA_MEMORY_USAGE_CPU_ONLY, should use this for staging.
+        .flags = 0,
+
+        .requiredFlags = 0,
+        .preferredFlags = 0,
+        .memoryTypeBits = 0,
+        .pool = null,
+        .pUserData = null,
+        .priority = 0.0,
+    };
+    var image = Image {.w = width, .h = height };
+    try(checkSuccess(c.vmaCreateImage(vmaAllocator, &createInfo, &allocCreateInfo, &image.image, &image.alloc, null) ));
+
+
+
+	VkImageViewCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+	createInfo.image = image;
+	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	createInfo.format = format;
+
+	createInfo.components.r = VK_COMPONENT_SWIZZLE_R; // VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.g = VK_COMPONENT_SWIZZLE_G; //VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.b = VK_COMPONENT_SWIZZLE_B; //VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.a = VK_COMPONENT_SWIZZLE_A; //VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.subresourceRange.aspectMask = aspectMask;
+	createInfo.subresourceRange.baseMipLevel = 0;
+	createInfo.subresourceRange.levelCount = 1;
+	createInfo.subresourceRange.baseArrayLayer = 0;
+	createInfo.subresourceRange.layerCount = 1;
+
+
+	VkImageView view = 0;
+	VK_CHECK(vkCreateImageView(device, &createInfo, nullptr, &view));
+
+	ASSERT(view);
+	return view;
+}
+
+
+
+    return image;
+}
+
+
 const Vertex = extern struct
 {
     // Math.Vec3 uses 16 bytes
@@ -199,20 +271,27 @@ const Vertex = extern struct
     col: u32 = 0,
 };
 
-fn createDescriptorSetLayout(stage: c.VkShaderStageFlags) anyerror!c.VkDescriptorSetLayout
+fn createDescriptorSetLayout(allocator: std.mem.Allocator,
+    bindingTypes: []const c.VkDescriptorType, stage: c.VkShaderStageFlags) anyerror!c.VkDescriptorSetLayout
 {
-    const setLayoutBinding = c.VkDescriptorSetLayoutBinding {
-        .binding = 0,
-        .descriptorCount = 1,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .pImmutableSamplers = null,
-        .stageFlags = stage,
-    };
+    const setLayoudBindings = try allocator.alloc(c.VkDescriptorSetLayoutBinding, bindingTypes.len);
+    defer allocator.free(setLayoudBindings);
 
+    var i: u32 = 0;
+    while(i < bindingTypes.len) : (i += 1)
+    {
+        setLayoudBindings[i] = c.VkDescriptorSetLayoutBinding {
+            .binding = i,
+            .descriptorCount = 1,
+            .descriptorType = bindingTypes[i], //c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pImmutableSamplers = null,
+            .stageFlags = stage,
+        };
+    }
     const layoutInfo = c.VkDescriptorSetLayoutCreateInfo {
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &setLayoutBinding,
+        .bindingCount = @intCast(u32, setLayoudBindings.len),
+        .pBindings = setLayoudBindings.ptr,
         .flags = 0,
         .pNext = null,
 
@@ -421,14 +500,20 @@ pub fn main() anyerror!void
 
 
 
-
+    renderTargetImage = try(createImage(800, 600, deviceWithQueues.colorFormat,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+        //| VK_IMAGE_USAGE_STORAGE_BIT
+        , VK_IMAGE_ASPECT_COLOR_BIT,
+        c.VMA_MEMORY_USAGE_GPU_ONLY));
 
 
 
     try(createSwapchain(allocator));
 
-    descriptorSetLayout = try(createDescriptorSetLayout(c.VK_SHADER_STAGE_VERTEX_BIT));
-    computeDescriptorSetLayout = try(createDescriptorSetLayout(c.VK_SHADER_STAGE_COMPUTE_BIT));
+    descriptorSetLayout = try(createDescriptorSetLayout(allocator,
+        &.{ c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER }, c.VK_SHADER_STAGE_VERTEX_BIT));
+    computeDescriptorSetLayout = try(createDescriptorSetLayout(allocator,
+        &.{ c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER }, c.VK_SHADER_STAGE_COMPUTE_BIT));
     try(createDescriptorPool());
     try(createDescriptorSets(descriptorSetLayout));
 
