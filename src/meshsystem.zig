@@ -15,9 +15,9 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const vertexShaderSource = @embedFile("../data/shader/basic3d.vert");
-const fragmentShaderSource = @embedFile("../data/shader/basic3d.frag");
-const computeShaderSource = @embedFile("../data/shader/compute_rasterizer.comp");
+const vertexShaderSource = @embedFile("data/shader/basic3d.vert");
+const fragmentShaderSource = @embedFile("data/shader/basic3d.frag");
+const computeShaderSource = @embedFile("data/shader/compute_rasterizer.comp");
 
 const MAX_MESHES: u32 = 512;
 var meshes: [MAX_MESHES]Mesh = undefined;

@@ -38,7 +38,7 @@ pub const Engine = struct
 
     pub fn deinit(self: *Engine) void
     {
-        _ = self;
+        //_ = self;
         if(self.context != null)
             c.SDL_GL_DeleteContext(self.context);
         if(self.window != null)
@@ -48,7 +48,7 @@ pub const Engine = struct
 
     pub fn setTitle(self: *Engine, title: []const u8) void
     {
-        _ = self;
+        //_ = self;
         if(self.window != null)
             c.SDL_SetWindowTitle(self.window, title.ptr);
     }
@@ -156,7 +156,7 @@ pub const Engine = struct
         }
 
         // glad: load all OpenGL function pointers
-        if (c.gladLoadGLLoader(@ptrCast(c.GLADloadproc, c.SDL_GL_GetProcAddress)) == 0)
+        if (c.gladLoadGLLoader(@ptrCast(c.GLADloadproc, &c.SDL_GL_GetProcAddress)) == 0)
         {
             panic("Failed to initialise GLAD\n", .{});
         }

@@ -18,8 +18,8 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const vertexShaderSource = @embedFile("../data/shader/triangle.vert");
-const fragmentShaderSource = @embedFile("../data/shader/triangle.frag");
+const vertexShaderSource = @embedFile("data/shader/triangle.vert");
+const fragmentShaderSource = @embedFile("data/shader/triangle.frag");
 
 const Pcg = std.rand.Pcg;
 
@@ -406,7 +406,7 @@ pub fn main() anyerror!void
     c.glClearColor(0.0, 0.2, 0.4, 1.0);
     const ran = @intCast(u64, std.time.nanoTimestamp() & 0xffff_ffff_ffff_ffff);
     var gameState = GameState.new(ran);
-    
+
     c.glBindVertexArray(vao);
 
     while (eng.running)
@@ -603,7 +603,7 @@ pub fn main() anyerror!void
 
         FlipY.draw(renderTargetTexture);
         c.glUseProgram( 0 );
-        
+
         eng.swapBuffers();
         try eng.endFrame();
 

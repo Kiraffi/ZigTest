@@ -16,7 +16,7 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const computeSource = @embedFile("../data/shader/compute.comp");
+const computeSource = @embedFile("data/shader/compute.comp");
 
 var program = ogl.Shader{};
 

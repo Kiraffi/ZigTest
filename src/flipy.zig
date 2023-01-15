@@ -16,8 +16,8 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const vertexShaderSource = @embedFile("../data/shader/flip_y_texture.vert");
-const fragmentShaderSource = @embedFile("../data/shader/textured_triangle.frag");
+const vertexShaderSource = @embedFile("data/shader/flip_y_texture.vert");
+const fragmentShaderSource = @embedFile("data/shader/textured_triangle.frag");
 
 var ibo = ogl.ShaderBuffer{};
 

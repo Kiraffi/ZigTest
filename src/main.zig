@@ -8,7 +8,7 @@ const engine = @import("engine.zig");
 const utils = @import("utils.zig");
 
 const FontSystem = @import("fontsystem.zig");
-const MeshSystem = @import("meshsystem2.zig");
+const MeshSystem = @import("meshsystem.zig");
 const FlipY = @import("flipy.zig");
 
 const rendertotexture = @import("rendertotexture.zig");
@@ -24,8 +24,8 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const vertexShaderSource = @embedFile("../data/shader/triangle.vert");
-const fragmentShaderSource = @embedFile("../data/shader/triangle.frag");
+const vertexShaderSource = @embedFile("data/shader/triangle.vert");
+const fragmentShaderSource = @embedFile("data/shader/triangle.frag");
 
 const FrameData = extern struct
 {
@@ -56,10 +56,10 @@ pub fn main() anyerror!void
 
     const CameraFrameBuffer = extern struct
     {
-        camMat: Math.Mat44 = Math.Mat44{},
-        viewProj: Math.Mat44 = Math.Mat44{},
-        mvp: Math.Mat44 = Math.Mat44{},
-        padding: Math.Mat44 = Math.Mat44{},
+        camMat: Math.Mat44 = Math.Mat44Identity,
+        viewProj: Math.Mat44 = Math.Mat44Identity,
+        mvp: Math.Mat44 = Math.Mat44Identity,
+        padding: Math.Mat44 = Math.Mat44Identity,
     };
     var cameraDataBuffer = ogl.ShaderBuffer{};
     {

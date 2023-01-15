@@ -1,7 +1,14 @@
 const std = @import("std");
 
-fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, stpes: []const *std.build.RunStep, name: []const u8, zigFile: []const u8,
-    target: std.zig.CrossTarget, mode: std.builtin.Mode, runnable: bool, testable: bool) anyerror !void
+fn buildTarget(sdkPath: []const u8,
+    b: *std.build.Builder,
+    //steps: []const *std.build.RunStep,
+    name: []const u8,
+    zigFile: []const u8,
+    target: std.zig.CrossTarget,
+    mode: std.builtin.Mode,
+    runnable: bool,
+    testable: bool) anyerror !void
 {
     // to keep this debuggale from vscode without having to figure out some way to push the launch.json
     // to read the outputfile.
@@ -11,12 +18,12 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, stpes: []const *std.b
 
     // Sources
     exe.addCSourceFile("deps/glad/src/glad.c", &[_][]const u8{"-std=c99"});
-    exe.addCSourceFile("deps/VulkanMemoryAllocator/vma.cpp", &[_][]const u8{"-std=c++14"});
+    //exe.addCSourceFile("deps/VulkanMemoryAllocator/vma.cpp", &[_][]const u8{"-std=c++14"});
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    exe.addIncludeDir("deps/glad/include/");
-    exe.addIncludeDir("deps/VulkanMemoryAllocator/include/");
+    exe.addIncludePath("deps/glad/include/");
+    //exe.addIncludePath("deps/VulkanMemoryAllocator/include/");
     if (exe.target.isWindows())
     {
         var sdkPathAdd = std.mem.zeroes([1024]u8);
@@ -25,22 +32,22 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, stpes: []const *std.b
         // Vulkansdk/Include
         const inc = "/Include";
         std.mem.copy(u8, sdkPathAdd[sdkPath.len..], inc);
-        exe.addIncludeDir(sdkPathAdd[0..sdkPath.len + inc.len]);
+        exe.addIncludePath(sdkPathAdd[0..sdkPath.len + inc.len]);
 
         // Vulkansdk/Lib
         const libPath = "/Lib";
         std.mem.copy(u8, sdkPathAdd[sdkPath.len..], libPath);
-        exe.addLibPath(sdkPathAdd[0..sdkPath.len + libPath.len]);
+        exe.addLibraryPath(sdkPathAdd[0..sdkPath.len + libPath.len]);
 
         // Has sdl2
-        exe.addLibPath("libs");
-        exe.addIncludeDir("deps/SDL/include/");
+        exe.addLibraryPath("libs");
+        exe.addIncludePath("deps/SDL/include/");
         b.installBinFile("libs/SDL2.dll", "SDL2.dll");
         exe.linkSystemLibrary("vulkan-1");
     }
     else
     {
-        exe.linkSystemLibrary("vulkan");
+        //exe.linkSystemLibrary("vulkan");
     }
     exe.linkSystemLibrary("sdl2");
     exe.linkLibC();
@@ -48,8 +55,8 @@ fn buildTarget(sdkPath: []const u8, b: *std.build.Builder, stpes: []const *std.b
     exe.linkLibCpp();
     exe.install();
 
-    for(stpes) |step|
-        exe.step.dependOn(&step.step);
+    //for(steps) |step|
+    //    exe.step.dependOn(&step.step);
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
@@ -101,13 +108,13 @@ pub fn build(b: *std.build.Builder) anyerror!void
         std.debug.print("Vulkan path: {s}\n", .{sdkPath});
     }
 
-    const shaderCompilationSteps = [_]*std.build.RunStep {
-        // This shader compilation shuold be done only once per build, not once per exe.
-        try addShader(b, "shader.vert", "vert.spv"),
-        try addShader(b, "shader.frag", "frag.spv"),
-        try addShader(b, "compute_rasterizer.comp", "compute_rasterizer_comp.spv"),
-        try addShader(b, "compute.comp", "compute.spv"),
-    };
+    //const shaderCompilationSteps = [_]*std.build.RunStep {
+    //    // This shader compilation shuold be done only once per build, not once per exe.
+    //    try addShader(b, "shader.vert", "vert.spv"),
+    //    try addShader(b, "shader.frag", "frag.spv"),
+    //    try addShader(b, "compute_rasterizer.comp", "compute_rasterizer_comp.spv"),
+    //    try addShader(b, "compute.comp", "compute.spv"),
+    //};
 
     //try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, false, false));
     //try(buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, false, false));
@@ -115,9 +122,9 @@ pub fn build(b: *std.build.Builder) anyerror!void
 
     //try(buildTarget(sdkPath, b, "zigtetris", "src/tetris.zig", target, mode, true, false));
     //try(buildTarget(sdkPath, b, "zigcomprast", "src/main_compute_rasterizer.zig", target, mode, false, false));
-    //try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, true, false));
+    try(buildTarget(sdkPath, b, "zigmain", "src/main.zig", target, mode, true, false));
 
-    try(buildTarget(sdkPath, b, shaderCompilationSteps[0..], "zigmain", "src/main_vulkan_test.zig", target, mode, true, false));
+    //try(buildTarget(sdkPath, b, shaderCompilationSteps[0..], "zigmain", "src/main_vulkan_test.zig", target, mode, true, false));
 
 }
 

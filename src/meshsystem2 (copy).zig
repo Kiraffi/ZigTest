@@ -17,9 +17,11 @@ const panic = std.debug.panic;
 const Pcg = std.rand.Pcg;
 
 
-const vertexShaderSource = @embedFile("data/shader/basic3d_odd.vert");
-const fragmentShaderSource = @embedFile("data/shader/basic3d.frag");
-const computeShaderSource = @embedFile("data/shader/compute_rasterizer.comp");
+const testspv = @embedFile("../data/shader/comp_rast.spv");
+
+const vertexShaderSource = @embedFile("../data/shader/basic3d_odd.vert");
+const fragmentShaderSource = @embedFile("../data/shader/basic3d.frag");
+const computeShaderSource = @embedFile("../data/shader/compute_rasterizer.comp");
 
 const MAX_VERTICES: u32 = 1_048_576 * 3;
 var meshesVertices: [MAX_VERTICES]Vertex = undefined;
@@ -30,6 +32,8 @@ var ibo = ogl.ShaderBuffer{};
 var program = ogl.Shader{};
 var computeProgram = ogl.Shader{};
 
+var spvProg: c_uint = 0;
+
 const Vertex = extern struct
 {
     // Math.Vec3 uses 16 bytes
@@ -39,6 +43,37 @@ const Vertex = extern struct
 
 pub fn init() bool
 {
+        spvProg = c.glCreateProgram();
+        if(spvProg == 0)
+        {
+            panic("Failed to create shader program.\n", .{});
+            return false;
+        }
+
+// SPIR-V binary in memory
+var sid = c.glCreateShader(c.GL_COMPUTE_SHADER);
+c.glShaderBinary(1, &sid, c.GL_SHADER_BINARY_FORMAT_SPIR_V, testspv, testspv.len);
+c.glSpecializeShader(sid, "main", 0, 0, 0);
+
+var compiled: c_int = 0;
+c.glGetShaderiv(sid, c.GL_COMPILE_STATUS, &compiled);
+if (compiled != 0)
+  c.glAttachShader(spvProg, sid);
+        c.glLinkProgram( spvProg );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     program = ogl.Shader.createGraphicsProgram(vertexShaderSource, fragmentShaderSource);
     if(program.program == 0)
     {
@@ -46,12 +81,13 @@ pub fn init() bool
         return false;
     }
 
-    computeProgram = ogl.Shader.createComputeProgram(computeShaderSource);
-    if(computeProgram.program == 0)
-    {
-        panic("Failed to initialize meshsystem compute program.\n", .{});
-        return false;
-    }
+
+//    computeProgram = ogl.Shader.createComputeProgram(computeShaderSource);
+//    if(computeProgram.program == 0)
+//    {
+//        panic("Failed to initialize meshsystem compute program.\n", .{});
+//        return false;
+//    }
 
     var rand = Pcg.init(0);
 
@@ -84,7 +120,7 @@ pub fn init() bool
         {
             j = i / 3;
             const k: usize = j + 0; // breaks if on same x-line 2 points as in j + 0...
-            const ki: usize = j + 1;
+            const ki: usize = j + 5;
             if(i % 3 == 0)
             {
                 // this for some reason breaks the compute...?
@@ -132,6 +168,8 @@ pub fn draw(texture: ogl.Texture) void
     _ = texture;
     program.useShader();
 
+  //c.glAttachShader(spvProg, sid);
+
     meshBuffer.bind(2);
     c.glEnable(c.GL_CULL_FACE);
     //c.glCullFace(c.GL_BACK);
@@ -156,12 +194,14 @@ pub fn draw(texture: ogl.Texture) void
 //    c.glMemoryBarrier(c.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 
-const COMPUTE_X_GROUP_SIZE: u32 = 4 * 8 * 1;
+const COMPUTE_X_GROUP_SIZE: u32 = 4 * 4 * 1;
 const COMPUTE_Y_GROUP_SIZE: u32 = 64 * 1 * 1;
 
 pub fn draw2(texture: ogl.Texture) void
 {
-    computeProgram.useShader();
+                c.glUseProgram( spvProg );
+
+    //computeProgram.useShader();
     meshBuffer.bind(2);
     c.glBindImageTexture(0, texture.handle, 0, c.GL_FALSE, 0, c.GL_WRITE_ONLY, c.GL_RGBA8);
     const width: c_uint = @intCast(c_uint, texture.width + COMPUTE_X_GROUP_SIZE - 1);

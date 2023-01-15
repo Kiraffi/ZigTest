@@ -15,7 +15,7 @@ pub fn openglCallbackFunction( source: c.GLenum, sourceType: c.GLenum,
     _ = source;
     _ = sourceType;
     _ = id;
-    _ = severity;
+    //_ = severity;
     _ = length;
     _ = userParam;
 

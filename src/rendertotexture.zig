@@ -16,11 +16,11 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const vertexShaderSource = @embedFile("../data/shader/triangle_temp.vert");
-const fragmentShaderSource = @embedFile("../data/shader/triangle_temp.frag");
+const vertexShaderSource = @embedFile("data/shader/triangle_temp.vert");
+const fragmentShaderSource = @embedFile("data/shader/triangle_temp.frag");
 
-const vertexFullscreenShaderSource = @embedFile("../data/shader/textured_fullscreen.vert");
-const fragmentTextureShaderSource = @embedFile("../data/shader/textured_triangle.frag");
+const vertexFullscreenShaderSource = @embedFile("data/shader/textured_fullscreen.vert");
+const fragmentTextureShaderSource = @embedFile("data/shader/textured_triangle.frag");
 
 pub var renderTarget = ogl.Texture{};
 //pub var renderTarget2 = ogl.Texture{};
