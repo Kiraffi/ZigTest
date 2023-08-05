@@ -1,21 +1,21 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const Vector = std.meta.Vector;
+//const Vector = std.meta.Vector;
 
 
-pub const Vec2 = Vector(2, f32);
-pub const Vec3 = Vector(3, f32);
-pub const Vec4 = Vector(4, f32);
+pub const Vec2 = @Vector(2, f32);
+pub const Vec3 = @Vector(3, f32);
+pub const Vec4 = @Vector(4, f32);
 
-pub const UVec2 = Vector(2, u32);
-pub const UVec3 = Vector(3, u32);
-pub const UVec4 = Vector(4, u32);
+pub const UVec2 = @Vector(2, u32);
+pub const UVec3 = @Vector(3, u32);
+pub const UVec4 = @Vector(4, u32);
 
-pub const IVec2 = Vector(2, i32);
-pub const IVec3 = Vector(3, i32);
-pub const IVec4 = Vector(4, i32);
+pub const IVec2 = @Vector(2, i32);
+pub const IVec3 = @Vector(3, i32);
+pub const IVec4 = @Vector(4, i32);
 
-pub const Mat44 = Vector(16, f32);
+pub const Mat44 = @Vector(16, f32);
 
 pub const Mat44Identity =  Mat44{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
 pub const Quat = extern struct

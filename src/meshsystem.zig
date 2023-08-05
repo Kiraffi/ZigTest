@@ -141,11 +141,11 @@ pub fn draw(texture: ogl.Texture) void
     c.glDisable(c.GL_BLEND);
     c.glEnable(c.GL_DEPTH_TEST);
     c.glDepthFunc(c.GL_GREATER);
-    c.glDrawElements( c.GL_TRIANGLES, @intCast(c_int, indexBufferStartIndex), c.GL_UNSIGNED_INT, null );
+    c.glDrawElements( c.GL_TRIANGLES, @intCast(indexBufferStartIndex), c.GL_UNSIGNED_INT, null );
 }
 
-const COMPUTE_X_GROUP_SIZE: u32 = 4 * 8 * 1;
-const COMPUTE_Y_GROUP_SIZE: u32 = 64 * 1 * 1;
+const COMPUTE_X_GROUP_SIZE: u32 = 8; // 4 * 8 * 1;
+const COMPUTE_Y_GROUP_SIZE: u32 = 8; //64 * 1 * 1;
 
 pub fn draw2(texture: ogl.Texture) void
 {
@@ -153,8 +153,8 @@ pub fn draw2(texture: ogl.Texture) void
     meshBuffer.bind(2);
     iboCompute.bind(3);
     c.glBindImageTexture(0, texture.handle, 0, c.GL_FALSE, 0, c.GL_WRITE_ONLY, c.GL_RGBA8);
-    const width: c_uint = @intCast(c_uint, texture.width + COMPUTE_X_GROUP_SIZE - 1);
-    const height: c_uint = @intCast(c_uint, texture.height + COMPUTE_Y_GROUP_SIZE - 1);
+    const width: c_uint = @intCast(texture.width + COMPUTE_X_GROUP_SIZE - 1);
+    const height: c_uint = @intCast(texture.height + COMPUTE_Y_GROUP_SIZE - 1);
     c.glDispatchCompute(width / COMPUTE_X_GROUP_SIZE, height / COMPUTE_Y_GROUP_SIZE, 1);
     c.glMemoryBarrier(c.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
@@ -229,7 +229,7 @@ fn addCube() void
     }
     meshes[meshCount] = Mesh { .vertices = 36, .indices = 24,
         .indexBufferStartIndex = indexBufferStartIndex, .vertexBufferOffset = vertexBufferOffset,
-        .vertexByteSize = @intCast(u32, @sizeOf(Vertex)) };
+        .vertexByteSize = @intCast(@sizeOf(Vertex)) };
     meshCount += 1;
     meshesVerticesCount += 24;
     meshesIndicesCount += 36;

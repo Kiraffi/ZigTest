@@ -56,10 +56,10 @@ pub fn main() anyerror!void
 
     const CameraFrameBuffer = extern struct
     {
-        camMat: Math.Mat44 = Math.Mat44{},
-        viewProj: Math.Mat44 = Math.Mat44{},
-        mvp: Math.Mat44 = Math.Mat44{},
-        padding: Math.Mat44 = Math.Mat44{},
+        camMat: Math.Mat44 = Math.Mat44Identity,
+        viewProj: Math.Mat44 = Math.Mat44Identity,
+        mvp: Math.Mat44 = Math.Mat44Identity,
+        padding: Math.Mat44 = Math.Mat44Identity,
     };
     var cameraDataBuffer = ogl.ShaderBuffer{};
     {

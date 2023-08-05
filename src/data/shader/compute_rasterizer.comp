@@ -282,7 +282,7 @@ void main()
 
                 if(addTriangles)
                 {
-                    #if 0
+                    #if 1
 
                     uint visibility = ~0;
                     #else

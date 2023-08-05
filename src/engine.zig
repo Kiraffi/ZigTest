@@ -58,7 +58,7 @@ pub const Engine = struct
         var b = button;
         if(b & 0x4000_0000 != 0)
             b = (b & 0xff) + 0x100;
-        const key = @intCast(usize, b);
+        const key: usize = @intCast(b);
 
         if(key >= 512)
             return false;
@@ -69,7 +69,7 @@ pub const Engine = struct
         var b = button;
         if(b & 0x4000_0000 != 0)
             b = (b & 0xff) + 0x100;
-        const key = @intCast(usize, b);
+        const key: usize = @intCast(b);
 
         if(key >= 512)
             return false;
@@ -98,11 +98,11 @@ pub const Engine = struct
     {
         self.lastDtNanos = self.timer.lap();
         self.totalNanos += self.lastDtNanos;
-        self.dt = @intToFloat(f32, self.lastDtNanos) / 1_000_000_000.0;
+        self.dt = @as(f64, @floatFromInt(self.lastDtNanos)) / 1_000_000_000.0;
         const frameUpdate: u32 = 10;
         if(self.frameIndex % frameUpdate == 0)
         {
-            const deltaTime = @intToFloat(f64, self.totalNanos - previousTime) / (@intToFloat(f64, frameUpdate) * 1_000_000_000.0);
+            const deltaTime = @as(f64, @floatFromInt(self.totalNanos - previousTime)) / (@as(f64, @floatFromInt(frameUpdate)) * 1_000_000_000.0);
             const fps = if(deltaTime > 0.0) 1.0 / deltaTime else 1000.0;
             var printBuffer = std.mem.zeroes([128]u8);
             const res = try std.fmt.bufPrint(&printBuffer, "Time: {d:3.3}ms, Fps: {d:3.2}", .{deltaTime * 1000.0, fps});
@@ -156,7 +156,9 @@ pub const Engine = struct
         }
 
         // glad: load all OpenGL function pointers
-        if (c.gladLoadGLLoader(@ptrCast(c.GLADloadproc, &c.SDL_GL_GetProcAddress)) == 0)
+        const proc: c.GLADloadproc = @ptrCast(&c.SDL_GL_GetProcAddress);
+        //if (c.gladLoadGLLoader(@ptrCast(c.GLADloadproc, &c.SDL_GL_GetProcAddress)) == 0)
+        if (c.gladLoadGLLoader(proc) == 0)
         {
             panic("Failed to initialise GLAD\n", .{});
         }
@@ -179,8 +181,8 @@ pub const Engine = struct
 
 
         // Make top left corner 0,0, requires ogl4.5
-        //c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
-        c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
+        c.glClipControl(c.GL_UPPER_LEFT, c.GL_ZERO_TO_ONE);
+        //c.glClipControl(c.GL_LOWER_LEFT, c.GL_ZERO_TO_ONE);
 
         var engine = Engine{.width = width, .height = height,
             .timer = try std.time.Timer.start(), .dt = 0.0, .lastDtNanos = 0, .totalNanos = 0,
@@ -207,7 +209,7 @@ pub const Engine = struct
                     var p = ev.key.keysym.sym;
                     if(p & 0x4000_0000 != 0)
                         p = (p & 0xff) + 0x100;
-                    const key = @intCast(usize, p);
+                    const key: usize = @intCast(p);
                     if(key < 512)
                     {
                         self.halfPresses[key] += 1;
@@ -219,7 +221,7 @@ pub const Engine = struct
                     var p = ev.key.keysym.sym;
                     if(p & 0x4000_0000 != 0)
                         p = (p & 0xff) + 0x100;
-                    const key = @intCast(usize, p);
+                    const key: usize = @intCast(p);
 
                     if(key < 512)
                     {

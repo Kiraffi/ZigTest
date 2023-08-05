@@ -497,7 +497,7 @@ pub fn main() anyerror!void
             const offsetX: f32 = 100.0;
             const offsetY: f32 = 20.0;
 
-            for(gameState.board) |block, i|
+            for(gameState.board, 0..) |block, i|
             {
                 var x = @intToFloat(f32, @intCast(u32, i) % GameState.BoardWidth);
                 var y = @intToFloat(f32, @intCast(u32, i) / GameState.BoardWidth);
@@ -541,7 +541,7 @@ pub fn main() anyerror!void
                 data.color = Colors[gameState.currentBlockIndex + 1];
             }
 
-            for(Blocks[gameState.nextBlockIndex].up) |block, i|
+            for(Blocks[gameState.nextBlockIndex].up, 0..) |block, i|
             {
                 const offset = Math.Vec2{450.0, 160.0 };
                 const blo = Math.Vec2{BlockSize * @intToFloat(f32, block[0]),

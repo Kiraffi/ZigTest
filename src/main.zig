@@ -14,6 +14,8 @@ const FlipY = @import("flipy.zig");
 const rendertotexture = @import("rendertotexture.zig");
 const compute = @import("compute.zig");
 
+const gltf = @import("gltf.zig");
+
 const c = @cImport({
     @cInclude("SDL.h");
     @cInclude("glad/glad.h");
@@ -39,12 +41,15 @@ const FrameData = extern struct
 
 pub fn main() anyerror!void
 {
+
+    try gltf.runGltf();
+
     var eng = try engine.Engine.init(1600, 900, "Test sdl ogl1", true);
     defer eng.deinit();
 
     var frameDataBuffer = ogl.ShaderBuffer{};
     {
-        const frame = FrameData {.width = @intToFloat(f32, eng.width), .height = @intToFloat(f32, eng.height), .pad1 = 0, .pad2 = 0};
+        const frame = FrameData {.width = @floatFromInt(eng.width), .height = @floatFromInt(eng.height), .pad1 = 0, .pad2 = 0};
         frameDataBuffer = ogl.ShaderBuffer.createBuffer(c.GL_UNIFORM_BUFFER, @sizeOf(FrameData), &frame, c.GL_DYNAMIC_COPY);
         if(!frameDataBuffer.isValid())
         {
@@ -146,8 +151,8 @@ pub fn main() anyerror!void
     while (eng.running)
     {
         try eng.update();
-        const moveSpeed = @floatCast(f32, 5.0 * eng.dt);
-        const rotSpeed = @floatCast(f32, 1.0 * eng.dt);
+        const moveSpeed: f32 = @as(f32, @floatCast(5.0 * eng.dt));
+        const rotSpeed: f32 = @as(f32, @floatCast(1.0 * eng.dt));
         if(eng.wasPressed(c.SDLK_ESCAPE))
         {
             eng.running = false;
@@ -211,7 +216,7 @@ pub fn main() anyerror!void
         const camMat = camera.getTransformAsCameraMatrix();
         b.camMat = camMat;
 
-        const aspect = @intToFloat(f32, eng.width) / @intToFloat(f32, eng.height);
+        const aspect: f32 = @as(f32, @floatFromInt(eng.width)) / @as(f32, @floatFromInt(eng.height));
         const fovY: f32 = Math.toRadians(90.0);
         //const zFar: f32 = 2000.0;
         const zNear: f32 = 0.125;
@@ -229,7 +234,7 @@ pub fn main() anyerror!void
 
 
 
-        const frame = FrameData {.width = @intToFloat(f32, eng.width), .height = @intToFloat(f32, eng.height), .pad1 = 0, .pad2 = 0};
+        const frame = FrameData {.width = @floatFromInt(eng.width), .height = @floatFromInt(eng.height), .pad1 = 0, .pad2 = 0};
 
         frameDataBuffer.writeData(@sizeOf(FrameData), 0, &frame);
         cameraDataBuffer.writeData(@sizeOf(CameraFrameBuffer), 0, &b);

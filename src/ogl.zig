@@ -376,15 +376,13 @@ fn createRenderPassInto(renderPass: *RenderPass, textures: []const Texture, dept
         c.GL_NONE, c.GL_NONE, c.GL_NONE, c.GL_NONE,
         c.GL_NONE, c.GL_NONE, c.GL_NONE, c.GL_NONE
     };
-
-    for(textures) |texture, i|
+    for(textures, 0..) |texture, i|
     {
-        const ii = @intCast(c_int, i);
-        const colAtt = @intCast(c_uint, c.GL_COLOR_ATTACHMENT0 + ii);
+        const colAtt: c_uint = @intCast(c.GL_COLOR_ATTACHMENT0 + i);
         c.glNamedFramebufferTexture(renderPass.fbo, colAtt, texture.handle, 0);
         drawBuf[i] = colAtt;
     }
-    c.glNamedFramebufferDrawBuffers(renderPass.fbo, @intCast(c_int, textures.len), &drawBuf);
+    c.glNamedFramebufferDrawBuffers(renderPass.fbo, @intCast(textures.len), &drawBuf);
 
     const status = c.glCheckNamedFramebufferStatus(renderPass.fbo, c.GL_FRAMEBUFFER);
     if(status != c.GL_FRAMEBUFFER_COMPLETE)
@@ -396,8 +394,8 @@ fn createRenderPassInto(renderPass: *RenderPass, textures: []const Texture, dept
 
     renderPass.width = width;
     renderPass.height = height;
-    renderPass.renderTargetCount = @intCast(u32, textures.len);
-    renderPass.depthTargetCount = @intCast(u32, depthTargets.len);
+    renderPass.renderTargetCount = @intCast(textures.len);
+    renderPass.depthTargetCount = @intCast(depthTargets.len);
 
     return true;
 }

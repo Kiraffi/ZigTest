@@ -14,7 +14,7 @@ const c = @cImport({
 const print = std.debug.print;
 const panic = std.debug.panic;
 
-const MAX_LETTERS: usize = 256;
+const MAX_LETTERS: usize = 65536;
 
 const vertexShaderSource = @embedFile("data/shader/textured_font.vert");
 const fragmentShaderSource = @embedFile("data/shader/textured_font.frag");
@@ -77,7 +77,7 @@ pub fn init() anyerror!bool
                 var x: usize = 0;
                 while(x < 8) : (x += 1)
                 {
-                    const xi = @intCast(u3, x);
+                    const xi:u3 = @intCast(x);
                     const v = ((val >> xi) & 1) * 255;
                     fontTexData[ind + 0] = v;
                     fontTexData[ind + 1] = v;
@@ -139,9 +139,9 @@ pub fn drawString(str: []const u8, pos: Math.Vec2, letterSize: Math.Vec2, col: u
             return;
         if(letter < 32)
             continue;
-        const l: u8 = @intCast(u8, letter) - 32;
+        const l: u8 = @as(u8, @intCast(letter)) - @as(u8, 32);
 
-        uv[0] = @intToFloat(f32, l);
+        uv[0] = @floatFromInt(l);
 
         letterDatas[writternLetters] =
             LetterData{ .pos = p, .size = letterSize, .uv = uv, .col = col, .tmp = 0.0};
@@ -167,6 +167,6 @@ pub fn draw() void
     c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
     c.glDisable(c.GL_DEPTH_TEST);
 
-    c.glDrawElements( c.GL_TRIANGLES, @intCast(c_int, writternLetters * 6), c.GL_UNSIGNED_INT, null );
+    c.glDrawElements( c.GL_TRIANGLES, @intCast(writternLetters * 6), c.GL_UNSIGNED_INT, null );
     writternLetters = 0;
 }
